@@ -168,6 +168,8 @@ public class ApproovService {
      */
     public synchronized void setBindingHeader(String header) {
         bindingHeader = header;
+        if (pinningHostnameVerifier != null)
+            Approov.setDataHashInToken("NONE");
     }
 
     /**
@@ -190,9 +192,10 @@ public class ApproovService {
         // update the data hash based on any token binding header
         if (bindingHeader != null) {
             String headerValue = connection.getRequestProperty(bindingHeader);
-            if (headerValue == null)
-                throw new IOException("Approov missing token binding header: " + bindingHeader);
-            Approov.setDataHashInToken(headerValue);
+            if (headerValue != null)
+                Approov.setDataHashInToken(headerValue);
+            else
+                Approov.setDataHashInToken("NONE");
         }
 
         // request an Approov token for the domain
