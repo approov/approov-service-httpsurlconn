@@ -26,6 +26,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,6 +42,22 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 
 import okio.ByteString;
+
+// message signing configuration
+class ApproovMessageSigningConfig {
+    // the name of the header that will be used to send the message signature
+    public String targetHeader;
+    // the list of headers to include in the message to be signed, in the order they should be added
+    public ArrayList<String> signedHeaders;
+    // true if the message body should also be signed
+    public Boolean signBody;
+    // constructor
+    public ApproovMessageSigningConfig(String targetHeader, ArrayList<String> signedHeaders, Boolean signBody) {
+        this.targetHeader = targetHeader;
+        this.signedHeaders = signedHeaders;
+        this.signBody = signBody;
+    }
+}
 
 // ApproovService provides a mediation layer to the Approov SDK itself
 public class ApproovService {
@@ -76,6 +93,9 @@ public class ApproovService {
     // set of URL regexs that should be excluded from any Approov protection, mapped to the compiled Pattern
     private static Map<String, Pattern> exclusionURLRegexs = null;
 
+    // message signing configuration, if any
+    private static ApproovMessageSigningConfig messageSigningConfig = null;
+
     /**
      * Construction is disallowed as this is a static only class.
      */
@@ -110,6 +130,20 @@ public class ApproovService {
 
         // build the custom hostname verifier
         pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+    }
+
+    /**
+     * Sets the message signing configuration. If this is set, then a message signature will be computed based on the
+     * request URL, the headers specified in signedHeaders in the order in which they are listed and, optionally, the
+     * body of the message. The signature will be added to the request headers using the header name specified in header.
+     *
+     * @param header is the name of the header to use for the message signature
+     * @param signedHeaders is the list of headers in the order in which to include them in the message signature.
+     * @param signBody is true if the message body should also be included in the message signature
+     */
+    public static synchronized void setMessageSigning(String targetHeader, ArrayList<String> signedHeaders, boolean signBody) {
+        Log.d(TAG, "setMessageSigning " + targetHeader + ", " + signedHeaders + ", " + signBody);
+        ApproovService.messageSigningConfig = new ApproovMessageSigningConfig(targetHeader, signedHeaders, signBody);
     }
 
     /**
@@ -351,7 +385,7 @@ public class ApproovService {
      * is not possible to use the networking interception to add the token. This will
      * likely require network access so may take some time to complete. If the attestation fails
      * for any reason then an ApproovException is thrown. This will be ApproovNetworkException for
-     * networking issues wher a user initiated retry of the operation should be allowed. Note that
+     * networking issues where a user initiated retry of the operation should be allowed. Note that
      * the returned token should NEVER be cached by your app, you should call this function when
      * it is needed.
      *
@@ -387,6 +421,7 @@ public class ApproovService {
             return approovResults.getToken();
     }
 
+    // TODO remove this function from the public interface?
     /**
      * Gets the signature for the given message. This uses an account specific message signing key that is
      * transmitted to the SDK after a successful fetch if the facility is enabled for the account. Note
