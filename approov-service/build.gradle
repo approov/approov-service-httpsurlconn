@@ -7,7 +7,6 @@ repositories {
     mavenCentral()
     google()
     jcenter()
-    maven { url "https://jitpack.io" }
 }
 
 group = 'com.github.approov'
@@ -34,18 +33,6 @@ android {
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'com.github.approov:approov-android-sdk:3.2.2'
+    implementation 'io.approov:approov-android-sdk:3.3.0'
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            release(MavenPublication) {
-                from components.release
-                groupId = 'com.github.approov'
-                artifactId = 'approov-service-httpsurlconn'
-                version = '3.2.2'
-            }
-        }
-    }
-}
