@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.approov</groupId>
   <artifactId>service.httpsurlconn</artifactId>
-  <version>3.3.0</version>
+  <version>VERSION_PLACEHOLDER</version>
   <packaging>aar</packaging>
   <name>Approov enable httpsurlconn interceptor</name>
     <description>Approov httpsurlconn interceptor</description>
@@ -40,7 +40,7 @@
     <dependency>
         <groupId>io.approov</groupId>
         <artifactId>approov-android-sdk</artifactId>
-        <version>3.3.0</version>
+        <version>3.5.0</version>
         <scope>runtime</scope>
     </dependency>
 </dependencies>
