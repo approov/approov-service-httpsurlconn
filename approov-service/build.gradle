@@ -6,12 +6,12 @@ plugins {
 repositories {
     mavenCentral()
     google()
-    jcenter()
 }
 
 group = 'com.github.approov'
 
 android {
+    namespace = 'io.approov.service.httpsurlconn'
     compileSdkVersion 30
 
     defaultConfig {
