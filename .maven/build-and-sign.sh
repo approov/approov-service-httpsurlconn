@@ -1,12 +1,29 @@
 #!/bin/bash
-
+# Ensure the script fails on errors
+set -e
 ## set variables/constants required by the script
+
+# Retrieve the tag from GITHUB_REF
+if [ -z "$GITHUB_REF" ]; then
+    echo "Error: GITHUB_REF is not set. This script requires a GitHub tag to be present."
+    exit 1
+fi
+
+# Extract the tag name from GITHUB_REF
+CURRENT_TAG=$(echo "$GITHUB_REF" | sed 's|refs/tags/||')
+
+# Check if the extracted tag matches the expected format (e.g., x.y.z)
+if [[ ! "$CURRENT_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Error: Current Git tag ($CURRENT_TAG) does not match the required format (x.y.z) ,using 0.0.0"
+    CURRENT_TAG="0.0.0"
+fi
 
 # The version of the package that will be build and will be visible in maven central
 # For Approov SDK release 3.3.0 (library 7257) the version was 3.3.0
 # This is also used to rename the folder where the package is stored by replacing the TAG-RENAME-DIR
 # THE POM FILE MUST BE UPDATED WITH THE CORRECT VERSION WHICH MUST MATCH THIS VARIABLE
-VERSION="3.3.0"
+VERSION="${CURRENT_TAG}"
+echo "VERSION: ${VERSION}"
 
 # Constant: current package name
 CURRENT_PACKAGE_NAME="service.httpsurlconn"
@@ -43,6 +60,15 @@ JAVADOC_JAR_PATH="../approov-service/docs/javadoc.jar"
 # Path to the POM file: YOU MUST UPDATE THIS FILE WITH THE CORRECT <version
 # which MUST match the VERSION variable above
 POM_FILE_PATH="../approov-service/pom.xml"
+
+# Place the package version in the correct pom file location replacing VERSION_PLACEHOLDER string
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS (BSD sed requires a backup suffix with -i)
+  sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" "$POM_FILE_PATH"
+else
+  # Linux (GNU sed allows -i without a suffix)
+  sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" "$POM_FILE_PATH"
+fi
 
 # Check if the above files exist before proceeding further
 if [ ! -f ${AAR_PATH} ]; then
