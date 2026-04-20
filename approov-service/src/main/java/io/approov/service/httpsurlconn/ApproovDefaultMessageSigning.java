@@ -648,8 +648,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
 
         @Override
         public String getField(String name) {
-            String value = request.getRequestProperty(name);
-            return value == null ? "" : value;
+            return request.getRequestProperty(name);
         }
 
         @Override
