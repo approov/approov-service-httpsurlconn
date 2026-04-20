@@ -280,7 +280,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         String sigInputHeader = Dictionary.valueOf(Map.of(
                 sigId, params.toComponentValue())).serialize();
 
-        // HttpURLConnection doesn't have a removeHeader function'
+        // HttpURLConnection doesn't have a removeHeader function
         // Instead we tracj what we're setting and ensure we don't set the same header twice which would cause issues with signing
         request.setRequestProperty("Signature", sigHeader);
         request.setRequestProperty("Signature-Input", sigInputHeader);
