@@ -35,7 +35,7 @@ public class ApproovNetworkException extends ApproovException {
         this.tokenFetchStatus = null;
     }
 
-    public ApproovNetworkException(Approov.TokenFetchStatus status, String message){
+    public ApproovNetworkException(Approov.TokenFetchStatus status, String message) {
         super(message);
         this.tokenFetchStatus = status;
     }
