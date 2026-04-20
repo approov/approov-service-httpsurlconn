@@ -98,7 +98,7 @@ public class ApproovService {
      * @param config the configuration string, or empty for no SDK initialization
      */
     public static void initialize(Context context, String config) {
-        // setup for using Appproov
+        // setup for using Approov
         pinningHostnameVerifier = null;
         proceedOnNetworkFail = false;
         useApproovStatusIfNoToken = false;
