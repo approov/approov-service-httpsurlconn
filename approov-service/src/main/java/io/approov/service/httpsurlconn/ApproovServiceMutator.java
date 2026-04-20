@@ -17,7 +17,7 @@
 
 package io.approov.service.httpsurlconn;
 
-// okhhtp3.Request equivalent imports
+// okhttp3.Request equivalent imports
 import java.net.URL;
 import java.net.HttpURLConnection;
 
