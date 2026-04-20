@@ -23,7 +23,7 @@ import com.criticalblue.approovsdk.Approov;
 // temporary so a user initiated retry should be performed
 
 public class ApproovNetworkException extends ApproovException {
-    private final  Approov.TokenFetchStatus tokenFetchStatus;
+    private final Approov.TokenFetchStatus tokenFetchStatus;
 
     /**
      * Constructs an Approov networking exception.
