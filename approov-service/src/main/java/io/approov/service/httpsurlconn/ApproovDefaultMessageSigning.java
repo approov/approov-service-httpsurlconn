@@ -561,9 +561,11 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             if (addApproovTraceIDHeader && changes.getTraceIDHeaderKey() != null) {
                 requestParameters.addComponentIdentifier(changes.getTraceIDHeaderKey());
             }
-            for (String headerName: optionalHeaders) {
-                if (provider.hasField(headerName)) {
-                    requestParameters.addComponentIdentifier(headerName);
+            if (optionalHeaders != null && !optionalHeaders.isEmpty()) {
+                for (String headerName: optionalHeaders) {
+                    if (provider.hasField(headerName)) {
+                        requestParameters.addComponentIdentifier(headerName);
+                    }
                 }
             }
             if (bodyDigestAlgorithm != null) {
