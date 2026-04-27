@@ -1162,7 +1162,7 @@ public class ApproovService {
         ApproovServiceMutator mutator = getServiceMutator();
 
         // perform the query substitution if it is present
-        Pattern pattern = Pattern.compile("[\\?&]"+queryParameter+"=([^&;]+)");
+        Pattern pattern = Pattern.compile("[\\?&]" + Pattern.quote(queryParameter) + "=([^&;]+)");
         Matcher matcher = pattern.matcher(urlString);
         if (matcher.find()) {
             // we have found an occurrence of the query parameter to be replaced so we look up the existing
