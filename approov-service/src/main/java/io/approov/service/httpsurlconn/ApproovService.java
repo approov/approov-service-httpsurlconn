@@ -100,7 +100,7 @@ public class ApproovService {
 
     // The mutator instance used to control ApproovService behaviour at key points in the flow.
     // Unless set using the ApproovService.setServiceMutator() method, the default behaviour
-    // defined in hte default implementation of AApproovServiceMutator will be used.
+    // defined in the default implementation of ApproovServiceMutator will be used.
     private static ApproovServiceMutator serviceMutator = ApproovServiceMutator.DEFAULT;
 
     // map of headers that should have their values substituted for secure strings, mapped to their
