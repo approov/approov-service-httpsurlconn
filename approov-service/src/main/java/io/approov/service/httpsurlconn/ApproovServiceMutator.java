@@ -17,7 +17,7 @@
 
 package io.approov.service.httpsurlconn;
 
-// okhhtp3.Request equivalent imports
+// HttpsURLConnection request equivalent imports
 import java.net.URL;
 import java.net.HttpURLConnection;
 
@@ -178,12 +178,12 @@ public interface ApproovServiceMutator {
     }
 
     /**
-     * Decides whether a request should be processed in the interceptor or not.
-     * Called at the start of the ApproovService interceptor processing.
+     * Decides whether a request should be processed by the httpsurlconn service
+     * layer or not. Called at the start of Approov request preparation.
      *
-     * @param request the request property extracted from the interceptor chain
-     * @return true if the request should be processed by the Approov interceptor,
-     *         false if it should be issued unchanged
+     * @param request the HttpsURLConnection being prepared
+     * @return true if the request should be processed by Approov, false if it
+     *         should be issued unchanged
      * @throws ApproovException The implementation can either return to indicate the
      *                          action described above or throw an ApproovException
      *                          encoding the cause of the failure
@@ -193,8 +193,8 @@ public interface ApproovServiceMutator {
             throw new ApproovException(
                     "handleInterceptorShouldProcessConnection method was passed a request that is null!");
 
-        // check if the URL matches one of the exclusion regexs and skip interceptor
-        // processing in these cases
+        // check if the URL matches one of the exclusion regexs and skip
+        // Approov request preparation in these cases
         String url = request.getURL().toString();
         for (Pattern pattern : ApproovService.getExclusionURLRegexs().values()) {
             Matcher matcher = pattern.matcher(url);
@@ -207,7 +207,7 @@ public interface ApproovServiceMutator {
 
     /**
      * Decides how to handle the token fetch result from a call to
-     * Approov.fetchApproovTokenAndWait() from within the interceptor.
+     * Approov.fetchApproovTokenAndWait() during request preparation.
      *
      * @param approovResults the TokenFetchResult from Approov
      * @param url            the URL string for which the token was requested
@@ -244,8 +244,8 @@ public interface ApproovServiceMutator {
     }
 
     /**
-     * Decides how to handle the token fetch result while substituting headers from
-     * within the interceptor. The passed fetch result to process is associated with
+     * Decides how to handle the token fetch result while substituting headers
+     * during request preparation. The passed fetch result to process is associated with
      * a preceding call to Approov.fetchSecureStringAndWait which passed in the
      * current header value (minus a prefix) as the key. This method is called once
      * per header being processed for substitution.
@@ -286,7 +286,7 @@ public interface ApproovServiceMutator {
 
     /**
      * Decides how to handle the token fetch result while substituting query params
-     * from within the interceptor. The passed fetch result to process is associated
+     * during request preparation. The passed fetch result to process is associated
      * with a preceding call to Approov.fetchSecureStringAndWait which passed in the
      * query value of a matching query key. This method is called once for each
      * matched
@@ -327,19 +327,21 @@ public interface ApproovServiceMutator {
     }
 
     /**
-     * Called after Approov has processed a network request, allowing further
-     * modifications.
+     * Called after the httpsurlconn service layer has applied its token and
+     * substitution changes, allowing further request modifications such as
+     * message signing.
      *
      * @param request the processed request
      * @param changes the mutations applied to the request by Approov
-     * @return the final request to use to complete the Approov interceptor step.
+     * @return the final request to use to complete Approov request preparation
      * @throws ApproovException The implementation can either return as described
      *                          above or throw an ApproovException encoding the
      *                          cause of the failure
      */
     default HttpsURLConnection handleInterceptorProcessedRequest(HttpsURLConnection request, ApproovRequestMutations changes)
             throws ApproovException {
-        // Modifies request in place and returns void by default, as no further changes to the request are required
+        // Modifies request in place and returns it by default, as no further
+        // changes to the request are required.
         return request;
     }
 

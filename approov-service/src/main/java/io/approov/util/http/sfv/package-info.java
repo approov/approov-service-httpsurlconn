@@ -1,6 +1,6 @@
 /**
- * Implementation of <a href= "https://www.rfc-editor.org/rfc/rfc8941.html">IETF
- * RFC 8941: Structured Field Values for HTTP</a>.
+ * Implementation of <a href= "https://www.rfc-editor.org/rfc/rfc9651.html">IETF
+ * RFC 9651: Structured Field Values for HTTP</a>.
  * <p>
  * Includes a {@link io.approov.util.http.sfv.Parser} and object equivalents of the defined data types
  * (see {@link io.approov.util.http.sfv.Type}).

@@ -1,6 +1,7 @@
 package io.approov.util.http.sfv;
 
 import android.util.Base64;
+
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;

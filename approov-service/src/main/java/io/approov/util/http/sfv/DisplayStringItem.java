@@ -46,12 +46,13 @@ public class DisplayStringItem implements Item<String> {
         sb.append("%\"");
         byte[] octets = value.getBytes(StandardCharsets.UTF_8);
         for (byte b : octets) {
-            if (b == 0x25 || b == 0x22 || b <= 0x1f || b == 0x7f) {
+            int unsigned = b & 0xff;
+            if (unsigned == 0x25 || unsigned == 0x22 || unsigned <= 0x1f || unsigned >= 0x7f) {
                 sb.append('%');
-                sb.append(Character.forDigit((b >> 4) & 0xf, 16));
-                sb.append(Character.forDigit(b & 0xf, 16));
+                sb.append(Character.forDigit((unsigned >> 4) & 0xf, 16));
+                sb.append(Character.forDigit(unsigned & 0xf, 16));
             } else {
-                sb.append((char) b);
+                sb.append((char) unsigned);
             }
         }
         sb.append('"');

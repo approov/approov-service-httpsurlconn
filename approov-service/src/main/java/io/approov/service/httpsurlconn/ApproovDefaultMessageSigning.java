@@ -43,7 +43,7 @@ import io.approov.util.http.sfv.Dictionary;
 import io.approov.util.sig.ComponentProvider;
 import io.approov.util.sig.SignatureBaseBuilder;
 import io.approov.util.sig.SignatureParameters;
-import io.approov.util.http.sfv.StringItem;
+import okio.ByteString;
 
 
 /**
@@ -91,6 +91,11 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
      */
     public ApproovDefaultMessageSigning() {
         hostFactories = new HashMap<>();
+    }
+
+    @Override
+    public String toString() {
+        return "ApproovDefaultMessageSigning";
     }
 
     /**
@@ -196,13 +201,14 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
     }
 
     /**
-     * Adds message signature to requests that have passed through the Approov
-     * interceptor. The request is only modified to include message signature
-     * headers if an ApproovToken has been added to the request and if there is
-     * a defined SignatureParameter factory for the request.
+     * Adds message signature headers to a request after the httpsurlconn
+     * service layer has applied its token and substitution changes. The request
+     * is only modified if an Approov token header was added and if there is a
+     * defined SignatureParametersFactory for the request host.
      *
-     * @param request The original HTTP request.
-     * @param changes The request mutations that were applied by the Approov interceptor.
+     * @param request The prepared HTTP request.
+     * @param changes The request mutations that were applied during Approov
+     *                processing.
      * @return The processed HTTP request with the signature headers added.
      * @throws ApproovException If an error occurs during processing.
      */
@@ -271,19 +277,21 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 throw new IllegalStateException("Unsupported algorithm identifier: " + params.getAlg());
         }
 
-        // --------------- Header handling ---------------
-
-        // Calculate the signature and message descriptor headers
-        // Correct (byte sequence item):
+        // Calculate the signature and message descriptor headers.
         String sigHeader = Dictionary.valueOf(Map.of(
                 sigId, ByteSequenceItem.valueOf(signature))).serialize();
         String sigInputHeader = Dictionary.valueOf(Map.of(
                 sigId, params.toComponentValue())).serialize();
 
-        // HttpURLConnection doesn't have a removeHeader function'
-        // Instead we tracj what we're setting and ensure we don't set the same header twice which would cause issues with signing
+        // HttpURLConnection doesn't have a removeHeader function, so we use
+        // setRequestProperty to replace any previous values and avoid accumulating
+        // duplicate signature headers across retries or repeated processing.
         request.setRequestProperty("Signature", sigHeader);
         request.setRequestProperty("Signature-Input", sigInputHeader);
+
+        Log.d(TAG, "Constructed Signature header: " + sigHeader);
+        Log.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
+        Log.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
 
         // Debugging - log the message and signature-related headers
         // WARNING never log the message in production code as it contains the Approov token which allows API access
@@ -492,8 +500,34 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 HttpsURLConnectionComponentProvider provider,
                 SignatureParameters requestParameters
         ) {
-            // HttpsURLConnection does not expose request body bytes for digesting here.
-            return false;
+            HttpsURLConnection request = provider.request;
+            if (!(request instanceof ApproovBufferedHttpsURLConnection)) {
+                return false;
+            }
+
+            byte[] body = ((ApproovBufferedHttpsURLConnection) request).getBufferedRequestBody();
+            if (body == null || body.length == 0) {
+                return false;
+            }
+
+            ByteString digest;
+            switch (bodyDigestAlgorithm) {
+                case DIGEST_SHA256:
+                    digest = ByteString.of(body).sha256();
+                    break;
+                case DIGEST_SHA512:
+                    digest = ByteString.of(body).sha512();
+                    break;
+                default:
+                    return false;
+            }
+
+            Dictionary digestHeader = Dictionary.valueOf(Map.of(
+                    bodyDigestAlgorithm, ByteSequenceItem.valueOf(digest.toByteArray())));
+
+            request.setRequestProperty("Content-Digest", digestHeader.serialize());
+            requestParameters.addComponentIdentifier("Content-Digest");
+            return true;
         }
 
 
@@ -542,7 +576,8 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
     }
 
     /**
-     * HttpURLConnectionComponentProvider implements the ComponentProvider interface for HttpURLConnection requests.
+     * HttpsURLConnectionComponentProvider adapts a {@link HttpsURLConnection}
+     * request to the generic signature ComponentProvider interface.
      */
     protected static final class HttpsURLConnectionComponentProvider implements ComponentProvider {
         private HttpsURLConnection request;
@@ -550,9 +585,9 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         private java.net.URL url;
 
         /**
-         * Constructs an instance of {@code OkHttpComponentProvider}.
+         * Constructs an instance of {@code HttpsURLConnectionComponentProvider}.
          *
-         * @param request The OkHttp request to wrap.
+         * @param request The HttpsURLConnection request to wrap.
          */
         HttpsURLConnectionComponentProvider(HttpsURLConnection request) {
             this.request = request;
@@ -659,4 +694,3 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         }
     }
 }
-

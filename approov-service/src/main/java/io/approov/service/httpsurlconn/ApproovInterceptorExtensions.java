@@ -23,9 +23,8 @@ import java.net.HttpURLConnection;
 import javax.net.ssl.HttpsURLConnection;
 
 /**
- * ApproovInterceptorExtensions provides an interface for handling callbacks during
- * the processing of network requests by Approov. It allows further modifications
- * to requests after Approov has applied its changes.
+ * Legacy callback interface for customizing the httpsurlconn service layer after
+ * Approov has applied its request changes.
  *
  * @deprecated Replace implementations of this interface with ApproovServiceMutator
  * while changing the name of the ApproovInterceptorExtensions.processedRequest
@@ -35,12 +34,14 @@ import javax.net.ssl.HttpsURLConnection;
 public interface ApproovInterceptorExtensions extends ApproovServiceMutator{
 
     /**
-     * Replace the default implementation of ApproovServiceMutator.handleInterceptorProcessedRequest
-     * to call the now deprecated ApproovInterceptorExtensions.processedRequest method. 
+     * Replaces the default implementation of
+     * ApproovServiceMutator.handleInterceptorProcessedRequest so existing
+     * ApproovInterceptorExtensions implementations continue to receive the final
+     * prepared HttpsURLConnection request.
      *
      * @param request the processed request
      * @param changes the mutations applied to the request by Approov
-     * @return the final request to use to complete the Approov interceptor step.
+     * @return the final request to use to complete Approov request preparation
      * @throws ApproovException if there is an error during processing
      */
     default HttpsURLConnection handleInterceptorProcessedRequest(HttpsURLConnection request, ApproovRequestMutations changes) throws ApproovException {

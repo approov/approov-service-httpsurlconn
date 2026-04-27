@@ -173,7 +173,6 @@ public interface ComponentProvider {
 				    case "accept-ch":
 				    case "example-list":
 				    {
-				    	// List
 				    	try {
 					    	String fieldValue = getField(baseIdentifier);
 					    	Type<?> sf = Parser.parseList(fieldValue);
@@ -198,7 +197,6 @@ public interface ComponentProvider {
 				    case "example-dict":
 				    case "cdn-cache-control":
 				    {
-				    	// Dictionary
 				    	try {
 					    	String fieldValue = getField(baseIdentifier);
 					    	Type<?> sf = Parser.parseDictionary(fieldValue);
@@ -228,7 +226,6 @@ public interface ComponentProvider {
 				    case "example-bytesequence":
 				    case "example-boolean":
 				    {
-				    	// Item
 				    	try {
 					    	String fieldValue = getField(baseIdentifier);
 					    	Type<?> sf = Parser.parseItem(fieldValue);
@@ -239,7 +236,6 @@ public interface ComponentProvider {
 				    }
 				    default:
 				    	throw new IllegalArgumentException("Field " + baseIdentifier + " is not a structured field");
-
 				}
 			} else {
 				return getField(baseIdentifier);
