@@ -190,7 +190,7 @@ public class SignatureParameters implements Cloneable {
 		return getParameters().get(key);
 	}
 
-	public Object setCustomParameter(String key, Object value) {
+	public SignatureParameters setCustomParameter(String key, Object value) {
 		switch (key) {
 			case ALG: {
 				String val = (String)value;
