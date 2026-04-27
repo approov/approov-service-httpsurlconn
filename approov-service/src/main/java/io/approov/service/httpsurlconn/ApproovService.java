@@ -330,7 +330,7 @@ public class ApproovService {
         if (pinningHostnameVerifier != null) {
             Log.d(TAG, "addSubstitutionQueryParam " + key);
             try {
-                Pattern pattern = Pattern.compile("[\\?&]" + key + "=([^&;]+)");
+                Pattern pattern = Pattern.compile("[\\?&]" + Pattern.quote(key) + "=([^&;]+)");
                 substitutionQueryParams.put(key, pattern);
             } catch (PatternSyntaxException e) {
                 Log.e(TAG, "addSubstitutionQueryParam " + key + " error: " + e.getMessage());
