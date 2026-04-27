@@ -540,6 +540,9 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          * @throws IllegalStateException If required parameters cannot be generated.
          */
         protected SignatureParameters buildSignatureParameters(HttpsURLConnectionComponentProvider provider, ApproovRequestMutations changes) {
+            if (baseParameters == null) {
+                throw new IllegalStateException("Message signing base parameters have not been configured");
+            }
             SignatureParameters requestParameters = new SignatureParameters(baseParameters);
             if (useAccountMessageSigning) {
                 requestParameters.setAlg(ALG_HS256);
