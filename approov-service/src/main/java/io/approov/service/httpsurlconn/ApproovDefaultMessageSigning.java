@@ -33,6 +33,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +41,7 @@ import javax.net.ssl.HttpsURLConnection;
 
 import io.approov.util.http.sfv.ByteSequenceItem;
 import io.approov.util.http.sfv.Dictionary;
+import io.approov.util.http.sfv.ListElement;
 import io.approov.util.sig.ComponentProvider;
 import io.approov.util.sig.SignatureBaseBuilder;
 import io.approov.util.sig.SignatureParameters;
@@ -278,10 +280,12 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         }
 
         // Calculate the signature and message descriptor headers.
-        String sigHeader = Dictionary.valueOf(Map.of(
-                sigId, ByteSequenceItem.valueOf(signature))).serialize();
-        String sigInputHeader = Dictionary.valueOf(Map.of(
-                sigId, params.toComponentValue())).serialize();
+        Map<String, ListElement<?>> sigMap = new LinkedHashMap<>();
+        sigMap.put(sigId, ByteSequenceItem.valueOf(signature));
+        String sigHeader = Dictionary.valueOf(sigMap).serialize();
+        Map<String, ListElement<?>> sigInputMap = new LinkedHashMap<>();
+        sigInputMap.put(sigId, params.toComponentValue());
+        String sigInputHeader = Dictionary.valueOf(sigInputMap).serialize();
 
         // HttpURLConnection doesn't have a removeHeader function, so we use
         // setRequestProperty to replace any previous values and avoid accumulating
@@ -303,8 +307,9 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             try {
                 MessageDigest digestBuilder = MessageDigest.getInstance("SHA-256");
                 byte[] digest = digestBuilder.digest(message.getBytes(StandardCharsets.UTF_8));
-                String digestHeader = Dictionary.valueOf(Map.of(
-                        DIGEST_SHA256, ByteSequenceItem.valueOf(digest))).serialize();
+                Map<String, ListElement<?>> digestMap = new LinkedHashMap<>();
+                digestMap.put(DIGEST_SHA256, ByteSequenceItem.valueOf(digest));
+                String digestHeader = Dictionary.valueOf(digestMap).serialize();
                 request.setRequestProperty("Signature-Base-Digest", digestHeader);
             } catch (NoSuchAlgorithmException e) {
                 Log.d(TAG, "Failed to get digest algorithm - no debug entry " + e);
@@ -522,8 +527,9 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                     return false;
             }
 
-            Dictionary digestHeader = Dictionary.valueOf(Map.of(
-                    bodyDigestAlgorithm, ByteSequenceItem.valueOf(digest.toByteArray())));
+            Map<String, ListElement<?>> digestMap = new LinkedHashMap<>();
+            digestMap.put(bodyDigestAlgorithm, ByteSequenceItem.valueOf(digest.toByteArray()));
+            Dictionary digestHeader = Dictionary.valueOf(digestMap);
 
             request.setRequestProperty("Content-Digest", digestHeader.serialize());
             requestParameters.addComponentIdentifier("Content-Digest");
