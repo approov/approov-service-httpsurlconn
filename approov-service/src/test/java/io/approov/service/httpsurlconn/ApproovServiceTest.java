@@ -45,8 +45,15 @@ public class ApproovServiceTest {
                 .thenAnswer(invocation ->
                         Base64.getDecoder().decode(invocation.getArgument(0, String.class)));
         mockAndroidBase64.when(() -> android.util.Base64.encodeToString(Mockito.any(byte[].class), Mockito.anyInt()))
-                .thenAnswer(invocation ->
-                        Base64.getEncoder().withoutPadding().encodeToString(invocation.getArgument(0, byte[].class)));
+                .thenAnswer(invocation -> {
+                    byte[] input = invocation.getArgument(0, byte[].class);
+                    int flags = invocation.getArgument(1, Integer.class);
+                    Base64.Encoder encoder = Base64.getEncoder();
+                    if ((flags & android.util.Base64.NO_PADDING) != 0) {
+                        encoder = encoder.withoutPadding();
+                    }
+                    return encoder.encodeToString(input);
+                });
         ApproovService.initialize(context, CONFIG);
         ApproovService.setServiceMutator(null);
     }
