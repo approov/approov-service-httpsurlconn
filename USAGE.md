@@ -161,7 +161,7 @@ ApproovService.setServiceMutator(signer);
 import io.approov.service.httpsurlconn.ApproovDefaultMessageSigning;
 
 ApproovDefaultMessageSigning.SignatureParametersFactory factory =
-        new ApproovDefaultMessageSigning.SignatureParametersFactory()
+        ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory()
                 .setUseAccountMessageSigning()
                 .setAddCreated(true)
                 .setExpiresLifetime(60);
@@ -172,6 +172,10 @@ ApproovDefaultMessageSigning signer = new ApproovDefaultMessageSigning()
 
 ApproovService.setServiceMutator(signer);
 ```
+
+Account message signing must also be enabled on the Approov account before the
+SDK can generate account signatures. See the Approov CLI documentation for the
+`approov secret -messageSigningKey change` command.
 
 To disable signing, remove the signer using `setServiceMutator(null)`, or return `null` from your factory for hosts you want to skip.
 
