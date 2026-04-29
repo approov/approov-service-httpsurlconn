@@ -168,9 +168,9 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
         if (processedRequestApplied) {
             return;
         }
-        processedRequestApplied = true;
 
         if (!preparedRequestData.invokeProcessedCallback) {
+            processedRequestApplied = true;
             return;
         }
 
@@ -182,6 +182,7 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
             if ((processedRequest != null) && (processedRequest != this)) {
                 synchronizeFromReturnedRequest(processedRequest);
             }
+            processedRequestApplied = true;
         } catch (ApproovException e) {
             throw new IOException("Approov processed request callback failed", e);
         }
