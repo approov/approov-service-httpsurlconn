@@ -888,6 +888,33 @@ public class ApproovService {
     }
 
     /**
+     * Determines if request processing should be deferred through a buffered
+     * connection so the final processed-request callback can see any body bytes
+     * written after addApproov returns.
+     *
+     * @param request is the request being prepared
+     * @param querySubstitutionResult is the configured URL substitution result
+     * @return true if the caller must continue using a buffered connection wrapper
+     */
+    private static boolean shouldUseBufferedConnection(
+            HttpsURLConnection request,
+            QuerySubstitutionResult querySubstitutionResult
+    ) {
+        if (querySubstitutionResult.hasEffectiveUrlChange()) {
+            return true;
+        }
+
+        if (request.getDoOutput()) {
+            return true;
+        }
+
+        String method = request.getRequestMethod();
+        return "POST".equalsIgnoreCase(method)
+                || "PUT".equalsIgnoreCase(method)
+                || "PATCH".equalsIgnoreCase(method);
+    }
+
+    /**
      * Performs the token fetch, optional TraceID propagation, and secure string
      * header substitutions for a request. This method intentionally stops short of
      * invoking the processed request callback so wrappers can finish any remaining
@@ -1106,14 +1133,14 @@ public class ApproovService {
             return request;
         }
 
-        if (!querySubstitutionResult.hasEffectiveUrlChange()) {
-            return preparedRequestData.mutator.handleInterceptorProcessedRequest(
-                    request,
-                    preparedRequestData.changes
-            );
+        if (shouldUseBufferedConnection(request, querySubstitutionResult)) {
+            return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
         }
 
-        return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
+        return preparedRequestData.mutator.handleInterceptorProcessedRequest(
+                request,
+                preparedRequestData.changes
+        );
     }
 
     /**
