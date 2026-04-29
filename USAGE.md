@@ -110,13 +110,13 @@ public final class Example {
 
 ## Preparing `HttpsURLConnection` requests
 
-Requests are prepared by passing a connection through `ApproovService.addApproov(...)` before the request is sent:
+Requests are prepared by passing a connection through `ApproovService.addApproovToConnection(...)` before the request is sent:
 
 ```java
 URL url = new URL("https://api.example.com/shapes");
 HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 connection.setRequestMethod("GET");
-connection = ApproovService.addApproov(connection);
+connection = ApproovService.addApproovToConnection(connection);
 ```
 
 You should always continue using the returned connection reference. In the common case this is the same instance that you passed in. If configured query substitutions change the effective URL then a wrapped connection is returned.
@@ -127,7 +127,7 @@ If you need to substitute configured query parameters before opening the connect
 URL url = new URL("https://api.example.com/shapes?api_key=shapes-key");
 URL substitutedUrl = ApproovService.substituteQueryParams(url);
 HttpsURLConnection connection = (HttpsURLConnection) substitutedUrl.openConnection();
-connection = ApproovService.addApproov(connection);
+connection = ApproovService.addApproovToConnection(connection);
 ```
 
 ## Message signing

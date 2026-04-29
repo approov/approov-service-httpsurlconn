@@ -98,7 +98,7 @@ public class ApproovServiceTest {
         HttpsURLConnection request = newConnection(requestUrl);
         request.setRequestMethod("GET");
 
-        HttpsURLConnection returned = ApproovService.addApproov(request);
+        HttpsURLConnection returned = ApproovService.addApproovToConnection(request);
 
         assertSame(request, returned);
         assertEquals("approov-token-value", request.getRequestProperty("Approov-Token"));
@@ -131,7 +131,7 @@ public class ApproovServiceTest {
         HttpsURLConnection request = newConnection(requestUrl);
         request.setRequestMethod("GET");
 
-        HttpsURLConnection returned = ApproovService.addApproov(request);
+        HttpsURLConnection returned = ApproovService.addApproovToConnection(request);
 
         assertNotSame(request, returned);
         assertTrue(returned instanceof ApproovBufferedHttpsURLConnection);
@@ -152,7 +152,7 @@ public class ApproovServiceTest {
         HttpsURLConnection request = newConnection(requestUrl);
         request.setRequestMethod("GET");
 
-        HttpsURLConnection returned = ApproovService.addApproov(request);
+        HttpsURLConnection returned = ApproovService.addApproovToConnection(request);
 
         assertSame(request, returned);
         assertEquals("NO_NETWORK", request.getRequestProperty("Approov-Token"));

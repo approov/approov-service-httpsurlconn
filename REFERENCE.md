@@ -259,7 +259,7 @@ Performs an Approov token fetch for the given URL.
 String fetchToken(String url) throws ApproovException
 ```
 
-Use this when it is not possible to use `addApproov(...)` to prepare the request automatically.
+Use this when it is not possible to use `addApproov(...)` or `addApproovToConnection(...)` to prepare the request automatically.
 
 ## getMessageSignature
 
@@ -321,13 +321,23 @@ void setInstallAttrsInToken(String attrs) throws ApproovException
 
 ## addApproov
 
-Prepares an `HttpsURLConnection` request by adding the Approov token header, applying header substitutions, applying pinning, and invoking the configured mutator.
+Prepares an `HttpsURLConnection` request in place by adding the Approov token header, applying header substitutions, applying pinning, and invoking the configured mutator when a wrapper is not required.
 
 ```java
-HttpsURLConnection addApproov(HttpsURLConnection request) throws ApproovException
+void addApproov(HttpsURLConnection request) throws ApproovException
 ```
 
-You should continue using the returned connection reference. In the common case it is the same instance that was passed in. If configured query substitutions change the effective URL then a wrapped connection is returned instead.
+This preserves the original binary-compatible API. Use `addApproovToConnection(...)` for query parameter substitution or deferred body-aware processing.
+
+## addApproovToConnection
+
+Prepares an `HttpsURLConnection` request and returns the connection reference that should be used for the network call.
+
+```java
+HttpsURLConnection addApproovToConnection(HttpsURLConnection request) throws ApproovException
+```
+
+In the common case this is the same instance that was passed in. If configured query substitutions change the effective URL, or if deferred body-aware processing is required, then a wrapped connection is returned instead.
 
 ## substituteQueryParams
 

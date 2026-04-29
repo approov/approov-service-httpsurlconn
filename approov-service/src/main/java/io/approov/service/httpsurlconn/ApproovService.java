@@ -1090,6 +1090,25 @@ public class ApproovService {
     }
 
     /**
+     * Adds Approov to the given request using the legacy in-place API. The
+     * Approov token is added in a header, any optional TraceID debug value is
+     * added in a separate header, the HostnameVerifier may be overridden to pin
+     * the request, and configured secure string header substitutions are applied.
+     *
+     * This method preserves the binary-compatible API from earlier releases. Use
+     * addApproovToConnection(HttpsURLConnection) when configured query
+     * substitutions may change the effective URL or when the caller needs
+     * deferred body-aware processing such as message-signing body digests.
+     *
+     * @param request is the HttpsUrlConnection to which Approov is being added
+     * @throws ApproovException if it is not possible to obtain an Approov token or
+     *                          secure strings
+     */
+    public static synchronized void addApproov(HttpsURLConnection request) throws ApproovException {
+        addApproovInternal(request, false);
+    }
+
+    /**
      * Adds Approov to the given request. The Approov token is added in a header,
      * any optional TraceID debug value is added in a separate header, the
      * HostnameVerifier may be overridden to pin the request, and configured secure
@@ -1100,13 +1119,21 @@ public class ApproovService {
      * @param request is the HttpsUrlConnection to which Approov is being added
      * @return the processed request, ready to be used by the caller. In the
      *         common case this is the same connection instance that was passed in.
-     *         If configured query substitutions change the target URL then a
-     *         wrapped connection is returned and the caller must continue to use
-     *         that returned instance.
+     *         If configured query substitutions change the target URL, or if
+     *         deferred body-aware processing is required, then a wrapped
+     *         connection is returned and the caller must continue to use that
+     *         returned instance.
      * @throws ApproovException if it is not possible to obtain an Approov token or
      *                          secure strings
      */
-    public static synchronized HttpsURLConnection addApproov(HttpsURLConnection request) throws ApproovException {
+    public static synchronized HttpsURLConnection addApproovToConnection(HttpsURLConnection request) throws ApproovException {
+        return addApproovInternal(request, true);
+    }
+
+    private static HttpsURLConnection addApproovInternal(
+            HttpsURLConnection request,
+            boolean allowBufferedConnection
+    ) throws ApproovException {
         // throw if we couldn't initialize the SDK
         if (pinningHostnameVerifier == null)
             throw new ApproovException("Approov not initialized");
@@ -1133,8 +1160,15 @@ public class ApproovService {
             return request;
         }
 
-        if (shouldUseBufferedConnection(request, querySubstitutionResult)) {
+        if (shouldUseBufferedConnection(request, querySubstitutionResult) && allowBufferedConnection) {
             return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
+        }
+
+        if (querySubstitutionResult.hasEffectiveUrlChange()) {
+            throw new ApproovException(
+                    "Configured query parameter substitution changed the request URL; " +
+                            "use addApproovToConnection(HttpsURLConnection) and continue with the returned connection"
+            );
         }
 
         return preparedRequestData.mutator.handleInterceptorProcessedRequest(
