@@ -229,10 +229,8 @@ public interface ApproovServiceMutator {
             case MITM_DETECTED:
                 if (ApproovService.getUseApproovStatusIfNoToken())
                     return true;
-                if (!ApproovService.getProceedOnNetworkFail())
-                    throw new ApproovNetworkException(status,
-                            "Approov token fetch for " + url + ": " + status.toString());
-                return false;
+                throw new ApproovNetworkException(status,
+                        "Approov token fetch for " + url + ": " + status.toString());
             case NO_APPROOV_SERVICE:
             case UNKNOWN_URL:
             case UNPROTECTED_URL: // Continue without token for unprotected URLs
@@ -272,10 +270,8 @@ public interface ApproovServiceMutator {
             case NO_NETWORK:
             case POOR_NETWORK:
             case MITM_DETECTED:
-                if (!ApproovService.getProceedOnNetworkFail())
-                    throw new ApproovNetworkException(status,
-                            "Header substitution for " + header + ": " + status.toString());
-                return false;
+                throw new ApproovNetworkException(status,
+                        "Header substitution for " + header + ": " + status.toString());
             case UNKNOWN_KEY:
                 return false;
             default:
@@ -314,10 +310,8 @@ public interface ApproovServiceMutator {
             case NO_NETWORK:
             case POOR_NETWORK:
             case MITM_DETECTED:
-                if (!ApproovService.getProceedOnNetworkFail())
-                    throw new ApproovNetworkException(status,
-                            "Query parameter substitution for " + queryKey + ": " + status.toString());
-                return false;
+                throw new ApproovNetworkException(status,
+                        "Query parameter substitution for " + queryKey + ": " + status.toString());
             case UNKNOWN_KEY:
                 return false;
             default:

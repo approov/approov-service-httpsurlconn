@@ -36,6 +36,6 @@ dependencies {
     implementation 'io.approov:approov-android-sdk:3.5.1'
 
     // Bouncycastle for ASN.1 parsing
-    implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    implementation 'org.bouncycastle:bcprov-jdk15to18:1.84'
 }
 

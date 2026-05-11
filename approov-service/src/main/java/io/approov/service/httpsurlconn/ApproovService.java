@@ -56,9 +56,6 @@ public class ApproovService {
     // hostname verifier that checks against the current Approov pins or null if SDK not initialized
     private static PinningHostnameVerifier pinningHostnameVerifier = null;
 
-    // true if the interceptor should proceed on network failures and not add an
-    // Approov token
-    private static boolean proceedOnNetworkFail = false;
 
     // true if the Approov fetch status should be used as the token header value if the
     // actual token fetch fails or returns an empty token
@@ -100,7 +97,6 @@ public class ApproovService {
     public static void initialize(Context context, String config) {
         // setup for using Approov
         pinningHostnameVerifier = null;
-        proceedOnNetworkFail = false;
         useApproovStatusIfNoToken = false;
         approovTokenHeader = APPROOV_TOKEN_HEADER;
         approovTokenPrefix = APPROOV_TOKEN_PREFIX;
@@ -124,18 +120,9 @@ public class ApproovService {
 
     /**
      * Sets a flag indicating if the network interceptor should proceed anyway if it is
-     * not possible to obtain an Approov token due to a networking failure. If this is set
-     * then your backend API can receive calls without the expected Approov token header
-     * being added, or without header/query parameter substitutions being made. Note that
-     * this should be used with caution because it may allow a request to be established
-     * before any dynamic pins have been received via Approov, thus potentially opening
-     * the channel to a MitM.
-     *
-     * @param proceed is true if Approov networking fails should allow continuation
-     */
+    @Deprecated
     public static synchronized void setProceedOnNetworkFail(boolean proceed) {
-        Log.d(TAG, "setProceedOnNetworkFail " + proceed);
-        proceedOnNetworkFail = proceed;
+        Log.e(TAG, "setProceedOnNetworkFail is no longer supported and has no effect.");
     }
 
     /**
@@ -674,11 +661,12 @@ public class ApproovService {
      * not possible to obtain an Approov token due to a networking failure.
      *
      * @return true if Approov networking fails should allow continuation, false otherwise
-     * @deprecated Use setServiceMutator to control this behavior
+     * @deprecated Proceed on network fail is no longer supported. This always returns false.
      */
     @Deprecated
     public static synchronized boolean getProceedOnNetworkFail() {
-        return proceedOnNetworkFail;
+        Log.e(TAG, "getProceedOnNetworkFail is no longer supported and always returns false.");
+        return false;
     }
 
     /**
@@ -802,9 +790,8 @@ public class ApproovService {
                  (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
                  (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED)) {
             // we are unable to get an Approov token due to network conditions so the request can
-            // be retried by the user later - unless overridden
-            if (!proceedOnNetworkFail)
-                throw new ApproovNetworkException("Approov token fetch for " + host + ": " + approovResults.getStatus().toString());
+            // be retried by the user later
+            throw new ApproovNetworkException("Approov token fetch for " + host + ": " + approovResults.getStatus().toString());
         }
         else if ((approovResults.getStatus() != Approov.TokenFetchStatus.NO_APPROOV_SERVICE) &&
                  (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_URL) &&
@@ -843,10 +830,9 @@ public class ApproovService {
                         (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
                         (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED)) {
                     // we are unable to get the secure string due to network conditions so the request can
-                    // be retried by the user later - unless overridden
-                    if (!proceedOnNetworkFail)
-                        throw new ApproovNetworkException("Header substitution for " + header + ": " +
-                                approovResults.getStatus().toString());
+                    // be retried by the user later
+                    throw new ApproovNetworkException("Header substitution for " + header + ": " +
+                            approovResults.getStatus().toString());
                 }
                 else if (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_KEY)
                     // we have failed to get a secure string with a more serious permanent error
@@ -919,10 +905,9 @@ public class ApproovService {
                     (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
                     (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED)) {
                 // we are unable to get the secure string due to network conditions so the request can
-                // be retried by the user later - unless this is overridden
-                if (!proceedOnNetworkFail)
-                    throw new ApproovNetworkException("Query parameter substitution for " + queryParameter + ": " +
-                            approovResults.getStatus().toString());
+                // be retried by the user later
+                throw new ApproovNetworkException("Query parameter substitution for " + queryParameter + ": " +
+                        approovResults.getStatus().toString());
             }
             else if (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_KEY)
                 // we have failed to get a secure string with a more serious permanent error
