@@ -70,12 +70,12 @@ You can then make Approov enabled `HttpsUrlConnection` API calls using the follo
 
 ### Java
 ```java
-ApproovService.addApproov(connection);
+connection = ApproovService.addApproov(connection);
 ```
 
 ### Kotlin
 ```kotlin
-ApproovService.addApproov(connection)
+connection = ApproovService.addApproov(connection)
 ```
 
 > **NOTE:** It is important that this call is made just prior to the connection being made and thus within any retry loop, to ensure that an updated Approov token is always made available on the connection request.

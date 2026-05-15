@@ -10,7 +10,7 @@ You can initialize the `ApproovService` with an empty configuration string if yo
 > ApproovService.initialize(context, "");
 > ```
 
-When initialized this way, calling `ApproovService.addApproov(connection)` performs no operations. It will not perform token injection, message signing, secure string substitution, or dynamic pinning. You can enable full Approov protection later in the application lifecycle by calling `ApproovService.initialize(context, config)` with a valid configuration string.
+When initialized this way, calling `connection = ApproovService.addApproov(connection)` performs no operations. It will not perform token injection, message signing, secure string substitution, or dynamic pinning. You can enable full Approov protection later in the application lifecycle by calling `ApproovService.initialize(context, config)` with a valid configuration string.
 
 # Approov Service Mutator
 

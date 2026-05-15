@@ -781,30 +781,20 @@ public class ApproovService {
         Log.d(TAG, "Token for " + host + ": " + approovResults.getLoggableToken());
 
         // check the status of Approov token fetch
-        if (approovResults.getStatus() == Approov.TokenFetchStatus.SUCCESS) {
+        if (mutator.handleInterceptorFetchTokenResult(approovResults, url)) {
             // we successfully obtained a token so add it to the header for the request
-            request.addRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
+            if (approovResults.getToken().isEmpty() && useApproovStatusIfNoToken) {
+                request.addRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
+            } else {
+                request.addRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
+            }
             requestMutations.setTokenHeaderKey(approovTokenHeader);
-        }
-        else if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                 (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                 (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED)) {
-            // we are unable to get an Approov token due to network conditions so the request can
-            // be retried by the user later
-            throw new ApproovNetworkException("Approov token fetch for " + host + ": " + approovResults.getStatus().toString());
-        }
-        else if ((approovResults.getStatus() != Approov.TokenFetchStatus.NO_APPROOV_SERVICE) &&
-                 (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_URL) &&
-                 (approovResults.getStatus() != Approov.TokenFetchStatus.UNPROTECTED_URL))
-            // we have failed to get an Approov token with a more serious permanent error
-            throw new ApproovException("Approov token fetch for " + host + ": " + approovResults.getStatus().toString());
-
-        // we only continue additional processing if we had a valid status from Approov, to prevent additional delays
-        // by trying to fetch from Approov again and this also protects against header substitutions in domains not
-        // protected by Approov and therefore potential subject to a MitM
-        if ((approovResults.getStatus() != Approov.TokenFetchStatus.SUCCESS) &&
-                (approovResults.getStatus() != Approov.TokenFetchStatus.UNPROTECTED_URL))
+        } else {
+            // we only continue additional processing if we had a valid status from Approov, to prevent additional delays
+            // by trying to fetch from Approov again and this also protects against header substitutions in domains not
+            // protected by Approov and therefore potential subject to a MitM
             return mutator.handleInterceptorProcessedRequest(request, requestMutations);
+        }
 
         // we now deal with any header substitutions, which may require further fetches but these
         // should be using cached results
@@ -815,29 +805,11 @@ public class ApproovService {
             if ((value != null) && value.startsWith(prefix) && (value.length() > prefix.length())) {
                 approovResults = Approov.fetchSecureStringAndWait(value.substring(prefix.length()), null);
                 Log.d(TAG, "Substituting header: " + header + ", " + approovResults.getStatus().toString());
-                if (approovResults.getStatus() == Approov.TokenFetchStatus.SUCCESS) {
+                if (mutator.handleInterceptorHeaderSubstitutionResult(approovResults, header)) {
                     // perform the header substitution
                     request.setRequestProperty(header, prefix + approovResults.getSecureString());
                     substitutedHeaderKeys.add(header);
                 }
-                else if (approovResults.getStatus() == Approov.TokenFetchStatus.REJECTED)
-                    // if the request is rejected then we provide a special exception with additional information
-                    throw new ApproovRejectionException("Header substitution for " + header + ": " +
-                            approovResults.getStatus().toString() + ": " + approovResults.getARC() +
-                            " " + approovResults.getRejectionReasons(),
-                            approovResults.getARC(), approovResults.getRejectionReasons());
-                else if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                        (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                        (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED)) {
-                    // we are unable to get the secure string due to network conditions so the request can
-                    // be retried by the user later
-                    throw new ApproovNetworkException("Header substitution for " + header + ": " +
-                            approovResults.getStatus().toString());
-                }
-                else if (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_KEY)
-                    // we have failed to get a secure string with a more serious permanent error
-                    throw new ApproovException("Header substitution for " + header + ": " +
-                            approovResults.getStatus().toString());
             }
         }
 
@@ -867,6 +839,8 @@ public class ApproovService {
         if (pinningHostnameVerifier == null)
             throw new ApproovException("Approov not initialized");
 
+        ApproovServiceMutator mutator = getServiceMutator();
+
         // check if the URL matches one of the exclusion regexs and just return if so
         String urlString = url.toString();
         for (Pattern pattern: exclusionURLRegexs.values()) {
@@ -884,7 +858,7 @@ public class ApproovService {
             String queryValue = matcher.group(1);
             Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
             Log.d(TAG, "Substituting query parameter: " + queryParameter + ", " + approovResults.getStatus().toString());
-            if (approovResults.getStatus() == Approov.TokenFetchStatus.SUCCESS) {
+            if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryParameter)) {
                 // perform a query substitution
                 try {
                     return new URL(new StringBuilder(urlString).replace(matcher.start(1),
@@ -895,24 +869,6 @@ public class ApproovService {
                     return url;
                 }
             }
-            else if (approovResults.getStatus() == Approov.TokenFetchStatus.REJECTED)
-                // if the request is rejected then we provide a special exception with additional information
-                throw new ApproovRejectionException("Query parameter substitution for " + queryParameter + ": " +
-                        approovResults.getStatus().toString() + ": " + approovResults.getARC() +
-                        " " + approovResults.getRejectionReasons(),
-                        approovResults.getARC(), approovResults.getRejectionReasons());
-            else if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                    (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                    (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED)) {
-                // we are unable to get the secure string due to network conditions so the request can
-                // be retried by the user later
-                throw new ApproovNetworkException("Query parameter substitution for " + queryParameter + ": " +
-                        approovResults.getStatus().toString());
-            }
-            else if (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_KEY)
-                // we have failed to get a secure string with a more serious permanent error
-                throw new ApproovException("Query parameter substitution for " + queryParameter + ": " +
-                        approovResults.getStatus().toString());
         }
         return url;
     }
