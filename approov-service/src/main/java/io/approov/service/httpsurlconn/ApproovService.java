@@ -53,10 +53,6 @@ public class ApproovService {
     // any prefix to be added before the Approov token, such as "Bearer "
     private static final String APPROOV_TOKEN_PREFIX = "";
 
-    // hostname verifier that checks against the current Approov pins or null if SDK not initialized
-    private static PinningHostnameVerifier pinningHostnameVerifier = null;
-
-
     // true if the Approov fetch status should be used as the token header value if the
     // actual token fetch fails or returns an empty token
     private static boolean useApproovStatusIfNoToken = false;
@@ -136,7 +132,6 @@ public class ApproovService {
 
             // setup for using Approov
             isInitialized = false;
-            pinningHostnameVerifier = null;
             useApproovStatusIfNoToken = false;
             approovTokenHeader = "Approov-Token";
             approovTokenPrefix = "";
@@ -148,9 +143,6 @@ public class ApproovService {
             serviceMutator = ApproovServiceMutator.DEFAULT;
 
             // build the custom hostname verifier if enabled
-            if (!config.isEmpty()) {
-                pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
-            }
             isInitialized = true;
             configString = config;
         }
@@ -884,7 +876,12 @@ public class ApproovService {
 
         // ensure the request is pinned - this is done even if the URL is excluded in case
         // the same domain is used for an Approov protected request and the same request is live
-        request.setHostnameVerifier(pinningHostnameVerifier);
+        if (mutator.handlePinningShouldProcessRequest(request)) {
+            javax.net.ssl.HostnameVerifier currentVerifier = request.getHostnameVerifier();
+            if (!(currentVerifier instanceof PinningHostnameVerifier)) {
+                request.setHostnameVerifier(new PinningHostnameVerifier(currentVerifier));
+            }
+        }
 
         // check if the request should be processed by the mutator (this also checks exclusions)
         if (!mutator.handleInterceptorShouldProcessConnection(request))
