@@ -915,7 +915,7 @@ public class ApproovService {
             // we successfully obtained a token so add it to the header for the request
             if (approovResults.getToken().isEmpty() && useApproovStatusIfNoToken) {
                 request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
-            } else {
+            } else if (!approovResults.getToken().isEmpty()) {
                 request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
             }
             requestMutations.setTokenHeaderKey(approovTokenHeader);

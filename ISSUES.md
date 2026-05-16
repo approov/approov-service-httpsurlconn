@@ -25,9 +25,9 @@ This document de-duplicates the previous findings, removes issues that have been
 
 #### 4. `setProceedOnNetworkFail` Appears Commented Out
 
-**Severity: P1. Status: Confirmed compile/API risk.**
+**Severity: P1. Status: Fixed.**
 
-The deprecated `setProceedOnNetworkFail` method appears inside an unterminated Javadoc block. It is documented in `REFERENCE.md`, but likely absent from the compiled API.
+*Resolution: Restored the method, fixed Javadoc, and set it to deprecated and no-op with error logging.*
 
 Evidence:
 
@@ -38,9 +38,9 @@ This should be fixed even though the method is obsolete, because published docum
 
 #### 5. Trace ID Header Support Is Missing
 
-**Severity: P1. Status: Confirmed.**
+**Severity: P1. Status: Fixed.**
 
-The HttpsURLConnection layer has no trace ID header constant, no `setApproovTraceIDHeader` or equivalent API, and no request mutation that adds `approovResults.getTraceID()`.
+*Resolution: Added `setApproovTraceIDHeader` and Trace ID injection logic.*
 
 Evidence:
 
@@ -53,9 +53,9 @@ This fails the protected-request and custom-header requirements in `TESTING_REQU
 
 #### 6. Token Fetch Uses Host Instead Of Full URL
 
-**Severity: P1. Status: Confirmed.**
+**Severity: P1. Status: Fixed.**
 
-`addApproov()` fetches the Approov token using only `request.getURL().getHost()`.
+*Resolution: Updated `addApproov` to use `request.getURL().toString()` instead of just host.*
 
 Evidence:
 
@@ -70,9 +70,9 @@ Impact:
 
 #### 7. Empty Token And Header Replacement Semantics Are Wrong
 
-**Severity: P1. Status: Confirmed.**
+**Severity: P1. Status: Fixed.**
 
-When token processing continues, `addApproov()` always adds a token header and uses `addRequestProperty`.
+*Resolution: Fixed `addApproov` to use `setRequestProperty` correctly and properly skip setting empty tokens when fallback is disabled.*
 
 Evidence:
 
@@ -88,9 +88,9 @@ Impact:
 
 #### 8. Dynamic Pinning Updates Are Not Acted Upon
 
-**Severity: P1. Status: Confirmed.**
+**Severity: P1. Status: Fixed.**
 
-OkHttp checks `approovResults.isConfigChanged()`, calls `Approov.fetchConfig()`, and rebuilds pins. The HttpsURLConnection layer does not check `isConfigChanged()` after token fetch.
+*Resolution: Implemented `isConfigChanged()` check and trigger to `Approov.fetchConfig()`.*
 
 Evidence:
 
