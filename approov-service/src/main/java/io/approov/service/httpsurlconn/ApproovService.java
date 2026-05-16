@@ -887,76 +887,80 @@ public class ApproovService {
         if (!mutator.handleInterceptorShouldProcessConnection(request))
             return request;
 
-        // update the data hash based on any token binding header if it is available
-        if (bindingHeader != null) {
-            String headerValue = request.getRequestProperty(bindingHeader);
-            if (headerValue != null)
-                Approov.setDataHashInToken(headerValue);
-        }
+        try {
+            // update the data hash based on any token binding header if it is available
+            if (bindingHeader != null) {
+                String headerValue = request.getRequestProperty(bindingHeader);
+                if (headerValue != null)
+                    Approov.setDataHashInToken(headerValue);
+            }
 
-        String url = request.getURL().toString();
+            String url = request.getURL().toString();
 
-        // request an Approov token for the request URL
-        Approov.TokenFetchResult approovResults = Approov.fetchApproovTokenAndWait(url);
+            // request an Approov token for the request URL
+            Approov.TokenFetchResult approovResults = Approov.fetchApproovTokenAndWait(url);
 
-        // provide information about the obtained token or error (note "approov token -check" can
-        // be used to check the validity of the token and if you use token annotations they
-        // will appear here to determine why a request is being rejected)
-        Log.d(TAG, "Token for " + url + ": " + approovResults.getLoggableToken());
+            // provide information about the obtained token or error (note "approov token -check" can
+            // be used to check the validity of the token and if you use token annotations they
+            // will appear here to determine why a request is being rejected)
+            Log.d(TAG, "Token for " + url + ": " + approovResults.getLoggableToken());
 
-        // fetch new configuration if there is any dynamic config update
-        if (approovResults.isConfigChanged()) {
-            Approov.fetchConfig();
-            Log.d(TAG, "Dynamic configuration updated");
-        }
+            // fetch new configuration if there is any dynamic config update
+            if (approovResults.isConfigChanged()) {
+                Approov.fetchConfig();
+                Log.d(TAG, "Dynamic configuration updated");
+            }
 
-        // check the status of Approov token fetch
-        if (mutator.handleInterceptorFetchTokenResult(approovResults, url)) {
-            // we successfully obtained a token so add it to the header for the request
-            if (approovResults.getToken().isEmpty() && useApproovStatusIfNoToken) {
-                request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
+            // check the status of Approov token fetch
+            if (mutator.handleInterceptorFetchTokenResult(approovResults, url)) {
+                // we successfully obtained a token so add it to the header for the request
+                if (approovResults.getToken().isEmpty() && useApproovStatusIfNoToken) {
+                    request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
+                } else {
+                    request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
+                }
+                requestMutations.setHasValidToken(!approovResults.getToken().isEmpty());
+                requestMutations.setTokenHeaderKey(approovTokenHeader);
+
+                String traceIDHeader = approovTraceIDHeader;
+                String traceID = approovResults.getTraceID();
+                if (traceIDHeader != null) {
+                    request.setRequestProperty(traceIDHeader, traceID != null ? traceID : "");
+                    requestMutations.setTraceIDHeaderKey(traceIDHeader);
+                }
             } else {
-                request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
+                // by trying to fetch from Approov again and this also protects against header substitutions in domains not
+                // protected by Approov and therefore potential subject to a MitM
+                return request;
             }
-            requestMutations.setHasValidToken(!approovResults.getToken().isEmpty());
-            requestMutations.setTokenHeaderKey(approovTokenHeader);
 
-            String traceIDHeader = approovTraceIDHeader;
-            String traceID = approovResults.getTraceID();
-            if (traceIDHeader != null) {
-                request.setRequestProperty(traceIDHeader, traceID != null ? traceID : "");
-                requestMutations.setTraceIDHeaderKey(traceIDHeader);
-            }
-        } else {
-            // by trying to fetch from Approov again and this also protects against header substitutions in domains not
-            // protected by Approov and therefore potential subject to a MitM
-            return request;
-        }
-
-        // we now deal with any header substitutions, which may require further fetches but these
-        // should be using cached results
-        for (Map.Entry<String, String> entry: substitutionHeaders.entrySet()) {
-            String header = entry.getKey();
-            String prefix = entry.getValue();
-            String value = request.getRequestProperty(header);
-            if ((value != null) && value.startsWith(prefix) && (value.length() > prefix.length())) {
-                approovResults = Approov.fetchSecureStringAndWait(value.substring(prefix.length()), null);
-                Log.d(TAG, "Substituting header: " + header + ", " + approovResults.getStatus().toString());
-                if (mutator.handleInterceptorHeaderSubstitutionResult(approovResults, header)) {
-                    // perform the header substitution
-                    String secureString = approovResults.getSecureString();
-                    if (secureString != null && !secureString.isEmpty()) {
-                        request.setRequestProperty(header, prefix + secureString);
-                        substitutedHeaderKeys.add(header);
+            // we now deal with any header substitutions, which may require further fetches but these
+            // should be using cached results
+            for (Map.Entry<String, String> entry: substitutionHeaders.entrySet()) {
+                String header = entry.getKey();
+                String prefix = entry.getValue();
+                String value = request.getRequestProperty(header);
+                if ((value != null) && value.startsWith(prefix) && (value.length() > prefix.length())) {
+                    approovResults = Approov.fetchSecureStringAndWait(value.substring(prefix.length()), null);
+                    Log.d(TAG, "Substituting header: " + header + ", " + approovResults.getStatus().toString());
+                    if (mutator.handleInterceptorHeaderSubstitutionResult(approovResults, header)) {
+                        // perform the header substitution
+                        String secureString = approovResults.getSecureString();
+                        if (secureString != null && !secureString.isEmpty()) {
+                            request.setRequestProperty(header, prefix + secureString);
+                            substitutedHeaderKeys.add(header);
+                        }
                     }
                 }
             }
+
+            if (!substitutedHeaderKeys.isEmpty())
+                requestMutations.setSubstitutionHeaderKeys(substitutedHeaderKeys);
+
+            return mutator.handleInterceptorProcessedRequest(request, requestMutations);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new ApproovException("Approov SDK error: " + e.getMessage());
         }
-
-        if (!substitutedHeaderKeys.isEmpty())
-            requestMutations.setSubstitutionHeaderKeys(substitutedHeaderKeys);
-
-        return mutator.handleInterceptorProcessedRequest(request, requestMutations);
     }
 
     /**
@@ -987,33 +991,37 @@ public class ApproovService {
         boolean isModified = false;
         String replacementURL = urlString;
         
-        for (Map.Entry<String, Pattern> entry : substitutionQueryParams.entrySet()) {
-            String queryKey = entry.getKey();
-            Pattern pattern = entry.getValue();
-            Matcher matcher = pattern.matcher(replacementURL);
-            if (matcher.find()) {
-                String queryValue = matcher.group(1);
-                Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
-                Log.d(TAG, "Substituting query parameter: " + queryKey + ", " + approovResults.getStatus().toString());
-                if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryKey)) {
-                    String secureString = approovResults.getSecureString();
-                    if (secureString != null && !secureString.isEmpty()) {
-                        replacementURL = new StringBuilder(replacementURL).replace(matcher.start(1),
-                                matcher.end(1), secureString).toString();
-                        isModified = true;
+        try {
+            for (Map.Entry<String, Pattern> entry : substitutionQueryParams.entrySet()) {
+                String queryKey = entry.getKey();
+                Pattern pattern = entry.getValue();
+                Matcher matcher = pattern.matcher(replacementURL);
+                if (matcher.find()) {
+                    String queryValue = matcher.group(1);
+                    Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
+                    Log.d(TAG, "Substituting query parameter: " + queryKey + ", " + approovResults.getStatus().toString());
+                    if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryKey)) {
+                        String secureString = approovResults.getSecureString();
+                        if (secureString != null && !secureString.isEmpty()) {
+                            replacementURL = new StringBuilder(replacementURL).replace(matcher.start(1),
+                                    matcher.end(1), secureString).toString();
+                            isModified = true;
+                        }
                     }
                 }
             }
-        }
-        
-        if (isModified) {
-            try {
-                return new URL(replacementURL);
-            } catch(MalformedURLException e) {
-                Log.d(TAG, "Substituting query parameters exception: " + e.toString());
+            
+            if (isModified) {
+                try {
+                    return new URL(replacementURL);
+                } catch(MalformedURLException e) {
+                    Log.d(TAG, "Substituting query parameters exception: " + e.toString());
+                }
             }
+            return url;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new ApproovException("Approov SDK error: " + e.getMessage());
         }
-        return url;
     }
 
     /**
@@ -1049,28 +1057,32 @@ public class ApproovService {
         // perform the header substitution if it is present
         Pattern pattern = Pattern.compile("[\\?&]"+queryParameter+"=([^&;]+)");
         Matcher matcher = pattern.matcher(urlString);
-        if (matcher.find()) {
-            // we have found an occurrence of the query parameter to be replaced so we look up the existing
-            // value as a key for a secure string
-            String queryValue = matcher.group(1);
-            Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
-            Log.d(TAG, "Substituting query parameter: " + queryParameter + ", " + approovResults.getStatus().toString());
-            if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryParameter)) {
-                // perform a query substitution
-                String secureString = approovResults.getSecureString();
-                if (secureString != null && !secureString.isEmpty()) {
-                    try {
-                        return new URL(new StringBuilder(urlString).replace(matcher.start(1),
-                                matcher.end(1), secureString).toString());
-                    }
-                    catch(MalformedURLException e) {
-                        Log.d(TAG, "Substituting query parameter exception: " + e.toString());
-                        return url;
+        try {
+            if (matcher.find()) {
+                // we have found an occurrence of the query parameter to be replaced so we look up the existing
+                // value as a key for a secure string
+                String queryValue = matcher.group(1);
+                Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
+                Log.d(TAG, "Substituting query parameter: " + queryParameter + ", " + approovResults.getStatus().toString());
+                if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryParameter)) {
+                    // perform a query substitution
+                    String secureString = approovResults.getSecureString();
+                    if (secureString != null && !secureString.isEmpty()) {
+                        try {
+                            return new URL(new StringBuilder(urlString).replace(matcher.start(1),
+                                    matcher.end(1), secureString).toString());
+                        }
+                        catch(MalformedURLException e) {
+                            Log.d(TAG, "Substituting query parameter exception: " + e.toString());
+                            return url;
+                        }
                     }
                 }
             }
+            return url;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new ApproovException("Approov SDK error: " + e.getMessage());
         }
-        return url;
     }
 }
 
