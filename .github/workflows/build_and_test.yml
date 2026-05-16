@@ -4,11 +4,17 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       WORKSPACE: "${{ github.workspace }}"
       GIT_BRANCH: "${{ github.ref }}"
       CURRENT_TAG: "${{ github.ref_name }}"
