@@ -543,32 +543,12 @@ public class ApproovService {
     }
 
     /**
-     * Gets the signature for the given message. This uses an account specific message signing key that is
-     * transmitted to the SDK after a successful fetch if the facility is enabled for the account. Note
-     * that if the attestation failed then the signing key provided is actually random so that the
-     * signature will be incorrect. An Approov token should always be included in the message
-     * being signed and sent alongside this signature to prevent replay attacks. If no signature is
-     * available, because there has been no prior fetch or the feature is not enabled, then an
-     * ApproovException is thrown.
-     *
-     * @param message is the message whose content is to be signed
-     * @return String of the base64 encoded message signature
-     * @throws ApproovException if there was a problem
+     * @deprecated Use getAccountMessageSignature or getInstallMessageSignature instead.
+     * This method is obsolete and currently returns null.
      */
-    public static String getMessageSignature(String message) throws ApproovException {
-        try {
-            String signature = Approov.getMessageSignature(message);
-            Log.d(TAG, "getMessageSignature");
-            if (signature == null)
-                throw new ApproovException("no signature available");
-            return signature;
-        }
-        catch (IllegalStateException e) {
-            throw new ApproovException("IllegalState: " + e.getMessage());
-        }
-        catch (IllegalArgumentException e) {
-            throw new ApproovException("IllegalArgument: " + e.getMessage());
-        }
+    @Deprecated
+    public static String getMessageSignature(String message) {
+        return null;
     }
 
     /**
