@@ -589,9 +589,9 @@ unless the SDK or platform specifically requires an exception.
 
 **Resolution**: Fixed. The `PinningHostnameVerifier` now correctly catches `SSLException` (which covers cases like `SSLPeerUnverifiedException`), logs the error, and gracefully returns `false` to reject the connection instead of unexpectedly throwing a `RuntimeException` and crashing the application.
 
-### 17. Build configuration is behind OkHttp and may be fragile
-
-Severity: P3
+### ~~17. Build configuration is behind OkHttp and may be fragile~~
+        
+Severity: ~~P3~~ **Fixed**
 
 HttpsURLConnection build config:
 
@@ -621,6 +621,8 @@ without the sibling mini-SDK/test-support paths will not configure tests cleanly
 Recommended fix: align compile SDK with OkHttp and either make test dependencies
 conditional or document the required sibling repository layout for integration
 tests.
+
+**Resolution**: Fixed. Updated `compileSdkVersion` to `compileSdk 34` in `approov-service/build.gradle` to align with the OkHttp service layer. Additionally, wrapped the `project(':approov-sdk')` and `project(':test-support')` test dependencies in `if (findProject(...) != null)` blocks so the build gracefully ignores them when the mini-SDK is unavailable, preventing build failures for external consumers.
 
 ### 18. Requirements, docs, and tests disagree on some token/status outcomes
 

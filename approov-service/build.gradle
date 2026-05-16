@@ -12,7 +12,7 @@ group = 'com.github.approov'
 
 android {
     namespace = 'io.approov.service.httpsurlconn'
-    compileSdkVersion 30
+    compileSdk 34
 
     defaultConfig {
         minSdkVersion 23
@@ -51,8 +51,12 @@ dependencies {
     implementation 'org.bouncycastle:bcprov-jdk15to18:1.84'
 
     testImplementation 'junit:junit:4.13.2'
-    testImplementation project(':approov-sdk')
-    testImplementation project(':test-support')
+    if (findProject(':approov-sdk') != null) {
+        testImplementation project(':approov-sdk')
+    }
+    if (findProject(':test-support') != null) {
+        testImplementation project(':test-support')
+    }
     testImplementation 'org.robolectric:robolectric:4.11.1'
     testImplementation 'org.json:json:20231013'
     testImplementation 'androidx.test:core:1.6.1'

@@ -32,3 +32,4 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Explicitly clear token binding state when the configured binding header is absent from a request, preventing stale `pay` claims (Issue #12).
 - Emptied the implementation of the deprecated `getMessageSignature` method (Issue #13).
 - Gracefully return `false` from `PinningHostnameVerifier` on `SSLException` instead of throwing a `RuntimeException` (Issue #16).
+- Aligned `compileSdk` to 34 and safely conditioned test dependencies on the presence of the mini-SDK environment (Issue #17).
