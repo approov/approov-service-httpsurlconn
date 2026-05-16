@@ -1154,9 +1154,8 @@ final class PinningHostnameVerifier implements HostnameVerifier {
             Log.w(TAG, "Pinning rejection for " + hostname);
             return false;
         } catch (SSLException e) {
-            Log.e(TAG, "Delegate Exception");
-            throw new RuntimeException(e);
+            Log.e(TAG, "Pinning exception for " + hostname + ": " + e.toString());
+            return false;
         }
-        return false;
     }
 }

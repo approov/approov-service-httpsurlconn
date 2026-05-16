@@ -564,9 +564,9 @@ Recommended fix: clarify whether secure strings for query substitution must alre
 be URL-encoded. If not, encode replacement values as query parameter values rather
 than raw URL substrings. Add tests for reserved characters.
 
-### 16. Pinning verifier wraps `SSLException` as `RuntimeException`
-
-Severity: P3
+### ~~16. Pinning verifier wraps `SSLException` as `RuntimeException`~~
+        
+Severity: ~~P3~~ **Fixed**
 
 `HostnameVerifier.verify` returns a boolean. Current pinning verifier catches
 `SSLException` and throws a runtime exception:
@@ -586,6 +586,8 @@ callers and may bypass the usual TLS verification failure path.
 
 Recommended fix: log and return `false` for peer certificate extraction failures,
 unless the SDK or platform specifically requires an exception.
+
+**Resolution**: Fixed. The `PinningHostnameVerifier` now correctly catches `SSLException` (which covers cases like `SSLPeerUnverifiedException`), logs the error, and gracefully returns `false` to reject the connection instead of unexpectedly throwing a `RuntimeException` and crashing the application.
 
 ### 17. Build configuration is behind OkHttp and may be fragile
 

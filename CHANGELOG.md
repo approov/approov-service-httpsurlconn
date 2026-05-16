@@ -31,3 +31,4 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Wrapped native SDK calls in request paths to correctly translate unchecked SDK exceptions into `ApproovException` (Issue #11).
 - Explicitly clear token binding state when the configured binding header is absent from a request, preventing stale `pay` claims (Issue #12).
 - Emptied the implementation of the deprecated `getMessageSignature` method (Issue #13).
+- Gracefully return `false` from `PinningHostnameVerifier` on `SSLException` instead of throwing a `RuntimeException` (Issue #16).
