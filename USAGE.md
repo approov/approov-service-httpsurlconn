@@ -196,6 +196,40 @@ ApproovService.setServiceMutator(signer);
 
 To disable signing, remove the signer (`setServiceMutator(null)`) or return `null` from your factory for hosts you want to skip.
 
+### Body Digests and Payload Signing
+
+Because `HttpsURLConnection` natively obscures the outgoing body stream until it's written, the standard `addApproov(connection)` method cannot automatically compute a `Signature-Base-Digest` over your request body payload.
+
+If you require body digest signing (for `POST`, `PUT`, or `PATCH` payloads), you must use the overloaded `addApproov` method, passing in the exact byte payload.
+
+**CRITICAL RULES FOR SIGNING**:
+When using message signing, the signature is computed *at the moment* you call `addApproov`. Therefore:
+1. **Call `addApproov` LAST**: Only call `addApproov(connection, bodyBytes)` after setting your HTTP method and all application headers (e.g., `Authorization`, `Content-Type`).
+2. **Do Not Mutate Later**: Modifying any headers or the HTTP method *after* calling `addApproov` will invalidate the signature on the backend.
+3. **Exact Body Match**: You must write the exact same `bodyBytes` to the connection's `OutputStream` afterward.
+4. **Content-Length**: If your `SignatureParametersFactory` is configured to sign the `Content-Length` header, you *must* explicitly set the length via `connection.setFixedLengthStreamingMode(bodyBytes.length)` *before* calling `addApproov`. Otherwise, the platform's automatic length calculation later will invalidate the signature.
+
+```java
+// 1. Set method and all headers first
+connection.setRequestMethod("POST");
+connection.setRequestProperty("Content-Type", "application/json");
+connection.setRequestProperty("Authorization", auth);
+
+// 2. Prepare the repeatable payload
+byte[] bodyBytes = json.getBytes(StandardCharsets.UTF_8);
+
+// 3. (Optional) Set fixed length if you sign Content-Length
+// connection.setFixedLengthStreamingMode(bodyBytes.length);
+
+// 4. Call addApproov with the payload
+connection = ApproovService.addApproov(connection, bodyBytes);
+
+// 5. Write the exact payload to the stream
+connection.getOutputStream().write(bodyBytes);
+```
+
+> **Note**: This overload is designed for repeatable/in-memory payloads. It cannot support true streaming or one-shot uploads. If you are streaming large files, you must configure your Approov account to make `Content-Digest` optional and use the standard `addApproov(connection)` method.
+
 ## Token Binding
 
 [Token Binding](https://ext.approov.io/docs/latest/approov-usage-documentation/#token-binding) allows you to bind the Approov token to a specific piece of data, such as an OAuth token or a user session identifier. This adds an extra layer of security by ensuring that the Approov token can only be used in conjunction with the bound data. The `ApproovService` calculates a hash of the binding data locally and supplies that hash to Approov so the resulting token can carry the corresponding `pay` claim. It is important to note that the actual binding data is never sent to the Approov cloud service; only the hash is transmitted.

@@ -490,10 +490,23 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          */
         protected boolean generateBodyDigest(
                 HttpsURLConnectionComponentProvider provider,
-                SignatureParameters requestParameters
+                SignatureParameters requestParameters,
+                byte[] bodyBytes
         ) {
-            // HttpsURLConnection does not expose request body bytes for digesting here.
-            return false;
+            if (bodyBytes == null) {
+                return false;
+            }
+            try {
+                MessageDigest digestBuilder = MessageDigest.getInstance(bodyDigestAlgorithm.toUpperCase());
+                byte[] digest = digestBuilder.digest(bodyBytes);
+                String contentDigestValue = bodyDigestAlgorithm + "=:" + Base64.encodeToString(digest, Base64.NO_WRAP) + ":";
+                provider.request.setRequestProperty("Content-Digest", contentDigestValue);
+                requestParameters.addComponentIdentifier("Content-Digest");
+                return true;
+            } catch (Exception e) {
+                Log.d(TAG, "Failed to compute Content-Digest: " + e);
+                return false;
+            }
         }
 
 
@@ -533,7 +546,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 }
             }
             if (bodyDigestAlgorithm != null) {
-                if (!generateBodyDigest(provider, requestParameters) && bodyDigestRequired) {
+                if (!generateBodyDigest(provider, requestParameters, changes.getBodyBytes()) && bodyDigestRequired) {
                     throw new IllegalStateException("Failed to create required body digest");
                 }
             }

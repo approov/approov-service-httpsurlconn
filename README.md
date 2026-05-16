@@ -66,21 +66,41 @@ The `<enter-your-config-string-here>` is a custom string that configures your Ap
 
 ## USING APPROOV SERVICE
 
-You can then make Approov enabled `HttpsUrlConnection` API calls using the following call on any `HttpsUrlConnection` connection, just before the connection is made:
+You can make Approov enabled `HttpsUrlConnection` API calls by using `ApproovService.addApproov` on your connection. 
+
+**CRITICAL SEQUENCE:** `ApproovService.addApproov` must be called as the **final step** before you connect to the network or write to the output stream. You must set your HTTP method and all application headers *before* calling `addApproov`.
 
 ### Java
 ```java
+// 1. Set method and all your headers FIRST
+connection.setRequestMethod("POST");
+connection.setRequestProperty("Content-Type", "application/json");
+connection.setRequestProperty("Authorization", auth);
+
+// 2. Call addApproov ONLY AFTER the request is fully formed
 connection = ApproovService.addApproov(connection);
+
+// 3. Do NOT mutate any headers after this point.
+connection.connect();
 ```
 
 ### Kotlin
 ```kotlin
+// 1. Set method and all your headers FIRST
+connection.requestMethod = "POST"
+connection.setRequestProperty("Content-Type", "application/json")
+connection.setRequestProperty("Authorization", auth)
+
+// 2. Call addApproov ONLY AFTER the request is fully formed
 connection = ApproovService.addApproov(connection)
+
+// 3. Do NOT mutate any headers after this point.
+connection.connect()
 ```
 
 > **NOTE:** It is important that this call is made just prior to the connection being made and thus within any retry loop, to ensure that an updated Approov token is always made available on the connection request.
 
-For API domains that are configured to be protected with an Approov token, this adds the `Approov-Token` header and pins the connection. This may also substitute header values when using secrets protection.
+**Message Signing Warning:** If you enable Approov Message Signing, modifying any headers, the HTTP method, or writing unexpected body payload bytes *after* calling `addApproov` will silently invalidate the generated signature on the backend. For API domains that are configured to be protected with an Approov token, this adds the `Approov-Token` header and pins the connection. This may also substitute header values when using secrets protection.
 
 Approov errors will generate an `ApproovException`, which is a type of `IOException`. This may be further specialized into an `ApproovNetworkException`, indicating an issue with networking that should provide an option for a user initiated retry.
 

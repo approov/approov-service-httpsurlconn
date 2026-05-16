@@ -61,8 +61,16 @@ public class ApproovService {
     // actual token fetch fails or returns an empty token
     private static boolean useApproovStatusIfNoToken = false;
 
+    // default header that will carry any optional Approov TraceID debug value from
+    // the Approov SDK
+    private static final String APPROOV_TRACE_ID_HEADER = "Approov-TraceID";
+
     // header to be used to send Approov tokens
     private static String approovTokenHeader = null;
+
+    // header used to send any optional Approov TraceID debug value provided by the
+    // Approov SDK, or null if no header is to be added
+    private static String approovTraceIDHeader = null;
 
     // any prefix String to be added before the transmitted Approov token
     private static String approovTokenPrefix = null;
@@ -98,8 +106,9 @@ public class ApproovService {
         // setup for using Approov
         pinningHostnameVerifier = null;
         useApproovStatusIfNoToken = false;
-        approovTokenHeader = APPROOV_TOKEN_HEADER;
-        approovTokenPrefix = APPROOV_TOKEN_PREFIX;
+        approovTokenHeader = "Approov-Token";
+        approovTokenPrefix = "";
+        approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
         bindingHeader = null;
         substitutionHeaders = new HashMap<>();
         exclusionURLRegexs = new HashMap<>();
@@ -120,6 +129,11 @@ public class ApproovService {
 
     /**
      * Sets a flag indicating if the network interceptor should proceed anyway if it is
+     * not possible to obtain an Approov token due to a networking failure.
+     * 
+     * @param proceed is true if Approov networking fails should allow continuation
+     * @deprecated Use ApproovServiceMutator policies instead. This method has no effect.
+     */
     @Deprecated
     public static synchronized void setProceedOnNetworkFail(boolean proceed) {
         Log.e(TAG, "setProceedOnNetworkFail is no longer supported and has no effect.");
@@ -175,6 +189,30 @@ public class ApproovService {
     public static synchronized void setBindingHeader(String header) {
         Log.d(TAG, "setBindingHeader " + header);
         bindingHeader = header;
+    }
+
+    /**
+     * Sets the header name that is used to pass any optional Approov TraceID debug
+     * value. By default the TraceID is provided on "Approov-TraceID" if one is
+     * available. Passing null disables adding the TraceID header.
+     *
+     * @param header is the name of the header to be used for the Approov
+     *               TraceID, or null to disable the header
+     */
+    public static synchronized void setApproovTraceIDHeader(String header) {
+        Log.d(TAG, "setApproovTraceIDHeader " + header);
+        approovTraceIDHeader = header;
+    }
+
+    /**
+     * Gets the header name that is used to pass any optional Approov
+     * TraceID.
+     *
+     * @return String the name of the header used for the Approov TraceID, or
+     *         null if the header is disabled
+     */
+    public static synchronized String getApproovTraceIDHeader() {
+        return approovTraceIDHeader;
     }
 
     /**
@@ -744,12 +782,35 @@ public class ApproovService {
      * @throws ApproovException if it is not possible to obtain an Approov token or secure strings
      */
     public static synchronized HttpsURLConnection addApproov(HttpsURLConnection request) throws ApproovException {
+        return addApproov(request, null);
+    }
+
+    /**
+     * Adds Approov to the given request. The Approov token is added in a header and this
+     * also overrides the HostnameVerifier with something that pins the requests. If a
+     * binding header has been specified then its hash will be set if it is present. This function
+     * may also substitute header values to hold secure string secrets. If it is not
+     * currently possible to fetch an Approov token due to networking issues then
+     * ApproovNetworkException is thrown and a user initiated retry of the operation should
+     * be allowed. ApproovRejectionException is thrown if header substitution is being attempted and
+     * the app fails attestation. Other ApproovExecptions represent a more permanent error condition.
+     * <p>
+     * <b>Important:</b> This method must be called after all signed headers and the HTTP method
+     * have been set. Do not mutate the headers or method after calling this. If providing bodyBytes,
+     * you must write exactly the same bytes to the connection's output stream later.
+     *
+     * @param request is the HttpsUrlConnection to which Approov is being added
+     * @param bodyBytes optional repeatable body payload to be used for message signing digests
+     * @throws ApproovException if it is not possible to obtain an Approov token or secure strings
+     */
+    public static synchronized HttpsURLConnection addApproov(HttpsURLConnection request, byte[] bodyBytes) throws ApproovException {
         // throw if we couldn't initialize the SDK
         if (pinningHostnameVerifier == null)
             throw new ApproovException("Approov not initialized");
 
         ApproovServiceMutator mutator = getServiceMutator();
         ApproovRequestMutations requestMutations = new ApproovRequestMutations();
+        requestMutations.setBodyBytes(bodyBytes);
         List<String> substitutedHeaderKeys = new java.util.ArrayList<>();
 
         // ensure the request is pinned - this is done even if the URL is excluded in case
@@ -771,26 +832,37 @@ public class ApproovService {
                 Approov.setDataHashInToken(headerValue);
         }
 
-        // request an Approov token for the domain
-        String host = request.getURL().getHost();
-        Approov.TokenFetchResult approovResults = Approov.fetchApproovTokenAndWait(host);
+        // request an Approov token for the request URL
+        Approov.TokenFetchResult approovResults = Approov.fetchApproovTokenAndWait(url);
 
         // provide information about the obtained token or error (note "approov token -check" can
         // be used to check the validity of the token and if you use token annotations they
         // will appear here to determine why a request is being rejected)
-        Log.d(TAG, "Token for " + host + ": " + approovResults.getLoggableToken());
+        Log.d(TAG, "Token for " + url + ": " + approovResults.getLoggableToken());
+
+        // fetch new configuration if there is any dynamic config update
+        if (approovResults.isConfigChanged()) {
+            Approov.fetchConfig();
+            Log.d(TAG, "Dynamic configuration updated");
+        }
 
         // check the status of Approov token fetch
         if (mutator.handleInterceptorFetchTokenResult(approovResults, url)) {
             // we successfully obtained a token so add it to the header for the request
             if (approovResults.getToken().isEmpty() && useApproovStatusIfNoToken) {
-                request.addRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
+                request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
             } else {
-                request.addRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
+                request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
             }
             requestMutations.setTokenHeaderKey(approovTokenHeader);
+
+            String traceIDHeader = approovTraceIDHeader;
+            String traceID = approovResults.getTraceID();
+            if (traceIDHeader != null && traceID != null) {
+                request.setRequestProperty(traceIDHeader, traceID);
+                requestMutations.setTraceIDHeaderKey(traceIDHeader);
+            }
         } else {
-            // we only continue additional processing if we had a valid status from Approov, to prevent additional delays
             // by trying to fetch from Approov again and this also protects against header substitutions in domains not
             // protected by Approov and therefore potential subject to a MitM
             return mutator.handleInterceptorProcessedRequest(request, requestMutations);

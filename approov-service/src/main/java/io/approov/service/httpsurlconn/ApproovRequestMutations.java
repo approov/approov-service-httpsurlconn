@@ -29,6 +29,7 @@ public class ApproovRequestMutations {
     private String originalURL;
     private List<String> substitutionQueryParamKeys;
     private String traceIDHeaderKey;
+    private byte[] bodyBytes;
 
 
     /**
@@ -112,5 +113,23 @@ public class ApproovRequestMutations {
      */
     public void setTraceIDHeaderKey(String traceIDHeaderKey) {
         this.traceIDHeaderKey = traceIDHeaderKey;
+    }
+
+    /**
+     * Gets the optional body bytes associated with this request mutation.
+     *
+     * @return the body bytes, or null if not set
+     */
+    public byte[] getBodyBytes() {
+        return bodyBytes;
+    }
+
+    /**
+     * Sets the optional body bytes associated with this request mutation.
+     *
+     * @param bodyBytes the body bytes
+     */
+    public void setBodyBytes(byte[] bodyBytes) {
+        this.bodyBytes = bodyBytes;
     }
 }

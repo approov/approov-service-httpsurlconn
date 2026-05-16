@@ -4,6 +4,11 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+- `ApproovService.addApproov(HttpsURLConnection, byte[])` overload to support message signing body digests (`Content-Digest`) for repeatable payloads.
+
 ## [3.5.4] - 2026-05-15
 
 ### Added
