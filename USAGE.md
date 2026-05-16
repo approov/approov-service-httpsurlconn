@@ -180,9 +180,10 @@ If you have already customized the mutator, you can add message signing to it by
 ### Customize behavior
 
 ```java
+import io.approov.service.httpsurlconn.ApproovDefaultMessageSigning;
 import io.approov.service.httpsurlconn.ApproovDefaultMessageSigning.SignatureParametersFactory;
 
-SignatureParametersFactory factory = new SignatureParametersFactory()
+SignatureParametersFactory factory = ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory()
     .setUseAccountMessageSigning() // or setUseInstallMessageSigning()
     .setAddCreated(true)
     .setExpiresLifetime(60);

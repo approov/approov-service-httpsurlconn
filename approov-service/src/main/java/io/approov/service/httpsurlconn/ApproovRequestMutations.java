@@ -30,6 +30,27 @@ public class ApproovRequestMutations {
     private List<String> substitutionQueryParamKeys;
     private String traceIDHeaderKey;
     private byte[] bodyBytes;
+    private boolean hasValidToken;
+
+    /**
+     * Gets whether the token header contains a real Approov token.
+     * Note that this only means some sort of JWT string is present (not an empty string or a
+     * fallback status). We do not know if it is actually signed with a valid or invalid key.
+     *
+     * @return true if the token header contains a JWT string
+     */
+    public boolean hasValidToken() {
+        return hasValidToken;
+    }
+
+    /**
+     * Sets whether the token header contains a real Approov token.
+     *
+     * @param hasValidToken true if the token header contains a JWT string
+     */
+    public void setHasValidToken(boolean hasValidToken) {
+        this.hasValidToken = hasValidToken;
+    }
 
 
     /**

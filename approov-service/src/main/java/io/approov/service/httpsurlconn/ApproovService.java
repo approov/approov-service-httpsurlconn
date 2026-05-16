@@ -122,9 +122,10 @@ public class ApproovService {
         } else {
             // initialize the Approov SDK
             try {
-                if (!config.isEmpty())
+                if (!config.isEmpty()) {
                     Approov.initialize(context.getApplicationContext(), config, "auto", comment);
-                Approov.setUserProperty("approov-service-httpsurlconn");
+                    Approov.setUserProperty("approov-service-httpsurlconn");
+                }
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "Approov initialization failed: " + e.getMessage());
                 throw e;
@@ -146,8 +147,10 @@ public class ApproovService {
             exclusionURLRegexs = new HashMap<>();
             serviceMutator = ApproovServiceMutator.DEFAULT;
 
-            // build the custom hostname verifier
-            pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+            // build the custom hostname verifier if enabled
+            if (!config.isEmpty()) {
+                pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+            }
             isInitialized = true;
             configString = config;
         }
@@ -885,7 +888,7 @@ public class ApproovService {
 
         // check if the request should be processed by the mutator (this also checks exclusions)
         if (!mutator.handleInterceptorShouldProcessConnection(request))
-            return mutator.handleInterceptorProcessedRequest(request, requestMutations);
+            return request;
 
         // update the data hash based on any token binding header if it is available
         if (bindingHeader != null) {
@@ -915,21 +918,22 @@ public class ApproovService {
             // we successfully obtained a token so add it to the header for the request
             if (approovResults.getToken().isEmpty() && useApproovStatusIfNoToken) {
                 request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getStatus().toString());
-            } else if (!approovResults.getToken().isEmpty()) {
+            } else {
                 request.setRequestProperty(approovTokenHeader, approovTokenPrefix + approovResults.getToken());
             }
+            requestMutations.setHasValidToken(!approovResults.getToken().isEmpty());
             requestMutations.setTokenHeaderKey(approovTokenHeader);
 
             String traceIDHeader = approovTraceIDHeader;
             String traceID = approovResults.getTraceID();
-            if (traceIDHeader != null && traceID != null) {
-                request.setRequestProperty(traceIDHeader, traceID);
+            if (traceIDHeader != null) {
+                request.setRequestProperty(traceIDHeader, traceID != null ? traceID : "");
                 requestMutations.setTraceIDHeaderKey(traceIDHeader);
             }
         } else {
             // by trying to fetch from Approov again and this also protects against header substitutions in domains not
             // protected by Approov and therefore potential subject to a MitM
-            return mutator.handleInterceptorProcessedRequest(request, requestMutations);
+            return request;
         }
 
         // we now deal with any header substitutions, which may require further fetches but these

@@ -213,6 +213,15 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             // the request doesn't have an Approov token, so we don't need to sign it
             return request;
         }
+
+        // Explicitly skip all message signing if we don't have a real JWT token 
+        // (e.g. empty token or status fallback). Without a JWT, the backend lacks the
+        // embedded public key (for install signing) or the mksid claim (for account signing)
+        // and cannot verify the signature anyway.
+        if (!changes.hasValidToken()) {
+            Log.d(TAG, "No valid Approov JWT token available - skipping message signing");
+            return request;
+        }
         // generate and add a message signature
         HttpsURLConnectionComponentProvider provider = new HttpsURLConnectionComponentProvider(request);
         SignatureParameters params = buildSignatureParameters(provider, changes);
@@ -385,7 +394,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         protected long expiresLifetime;
         protected boolean addApproovTokenHeader;
         protected boolean addApproovTraceIDHeader;
-        protected List<String> optionalHeaders;
+        protected List<String> optionalHeaders = new ArrayList<>();
 
         /**
          * Sets the base parameters for the factory.
@@ -542,7 +551,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          * @throws IllegalStateException If required parameters cannot be generated.
          */
         protected SignatureParameters buildSignatureParameters(HttpsURLConnectionComponentProvider provider, ApproovRequestMutations changes) {
-            SignatureParameters requestParameters = new SignatureParameters(baseParameters);
+            SignatureParameters requestParameters = baseParameters != null ? new SignatureParameters(baseParameters) : new SignatureParameters();
             if (useAccountMessageSigning) {
                 requestParameters.setAlg(ALG_HS256);
             } else {
@@ -557,7 +566,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                     requestParameters.setExpires(currentTime + expiresLifetime);
                 }
             }
-            if (addApproovTokenHeader) {
+            if (addApproovTokenHeader && changes.getTokenHeaderKey() != null) {
                 requestParameters.addComponentIdentifier(changes.getTokenHeaderKey());
             }
             if (addApproovTraceIDHeader && changes.getTraceIDHeaderKey() != null) {
