@@ -210,6 +210,15 @@ When using message signing, the signature is computed *at the moment* you call `
 3. **Exact Body Match**: You must write the exact same `bodyBytes` to the connection's `OutputStream` afterward.
 4. **Content-Length**: If your `SignatureParametersFactory` is configured to sign the `Content-Length` header, you *must* explicitly set the length via `connection.setFixedLengthStreamingMode(bodyBytes.length)` *before* calling `addApproov`. Otherwise, the platform's automatic length calculation later will invalidate the signature.
 
+### Not an Interceptor: HttpsURLConnection vs OkHttp
+
+It is important to understand how this integration fundamentally differs from interceptor-based designs like OkHttp:
+
+- **OkHttp is Immutable**: In OkHttp, an interceptor receives a `Request` and builds a new one via `request.newBuilder()`. Once the interceptor calls `chain.proceed(request)`, application code generally has no further opportunity to accidentally mutate that request before dispatch.
+- **HttpsURLConnection is Mutable**: `ApproovService.addApproov(...)` directly mutates the `HttpsURLConnection` you provide and returns it. Because it is mutable, your application code can still call `setRequestProperty()`, change HTTP methods, or stream body bytes *after* it has been signed by Approov.
+
+Because the service layer cannot enforce post-signing immutability, **it is entirely your responsibility to ensure you do not mutate the connection's headers or properties after calling `addApproov`**.
+
 ```java
 // 1. Set method and all headers first
 connection.setRequestMethod("POST");

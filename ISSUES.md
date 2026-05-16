@@ -640,6 +640,7 @@ The default mutator currently returns false and proceeds without mutation for:
 - `NO_APPROOV_SERVICE`
 - `UNKNOWN_URL`
 - `UNPROTECTED_URL`
+- `MITM_DETECTED` (and other network errors, when `useApproovStatusIfNoToken` is enabled)
 
 Evidence:
 
@@ -663,43 +664,6 @@ Recommended fix: decide the intended matrix for each token fetch status:
 
 Then update tests and docs together. This is more of a specification alignment
 issue than a pure implementation bug.
-
-### 19. HttpsURLConnection cannot provide OkHttp-equivalent post-signing immutability
-
-Severity: P3 / documented design constraint
-
-The main mutable connection concern remains true by platform design:
-
-- `ApproovService.addApproov(...)` mutates the supplied `HttpsURLConnection`.
-- It returns the same mutable object.
-- Callers can still call `setRequestProperty`, change method-related state, or
-  write body bytes after signing.
-
-Relevant implementation:
-
-- `ApproovService.java:872-958`
-- message signing writes `Signature` and `Signature-Input` at
-  `ApproovDefaultMessageSigning.java:305-309`
-
-OkHttp is materially different:
-
-- OkHttp `Request` is immutable.
-- Interceptors build a new request via `request.newBuilder()`.
-- Once the interceptor calls `chain.proceed(request)`, application code no longer
-  has a normal chance to mutate that exact request object before dispatch.
-
-The current docs warn developers to call `addApproov` last:
-
-- `README.md:71-103`
-- `USAGE.md:201-231`
-
-That is probably the right usability trade-off for HttpsURLConnection, especially
-with the new `addApproov(connection, bodyBytes)` overload. It should remain framed
-as a documented contract rather than a promise of enforcement.
-
-Recommended action: keep the warning prominent. Do not claim OkHttp-equivalent
-immutability. Consider adding a short "not an interceptor" section to `USAGE.md`
-explaining why post-`addApproov` mutation is caller responsibility.
 
 ## Test Coverage Gaps
 
