@@ -114,25 +114,12 @@ public class ApproovService {
     public static synchronized void initialize(Context context, String config, String comment) {
         // check if the Approov SDK is already initialized
         boolean allowEnableAfterEmptyInitialization = isInitialized && (configString != null) && configString.isEmpty() && !config.isEmpty();
-        if (isInitialized && !comment.startsWith("reinit") && !allowEnableAfterEmptyInitialization) {
+        if (isInitialized && !comment.startsWith("reinit") && !comment.startsWith("options:") && !allowEnableAfterEmptyInitialization) {
             if (!config.equals(configString)) {
                 throw new IllegalStateException("ApproovService layer is already initialized.");
             }
             Log.d(TAG, "Ignoring multiple ApproovService layer initializations with the same config");
         } else {
-            // setup for using Approov
-            isInitialized = false;
-            pinningHostnameVerifier = null;
-            useApproovStatusIfNoToken = false;
-            approovTokenHeader = "Approov-Token";
-            approovTokenPrefix = "";
-            approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
-            bindingHeader = null;
-            substitutionHeaders = new HashMap<>();
-            substitutionQueryParams = new HashMap<>();
-            exclusionURLRegexs = new HashMap<>();
-            serviceMutator = ApproovServiceMutator.DEFAULT;
-
             // initialize the Approov SDK
             try {
                 if (!config.isEmpty())
@@ -145,6 +132,19 @@ public class ApproovService {
                 Log.e(TAG, "Approov initialization failed: " + e.getMessage());
                 throw e;
             }
+
+            // setup for using Approov
+            isInitialized = false;
+            pinningHostnameVerifier = null;
+            useApproovStatusIfNoToken = false;
+            approovTokenHeader = "Approov-Token";
+            approovTokenPrefix = "";
+            approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
+            bindingHeader = null;
+            substitutionHeaders = new HashMap<>();
+            substitutionQueryParams = new HashMap<>();
+            exclusionURLRegexs = new HashMap<>();
+            serviceMutator = ApproovServiceMutator.DEFAULT;
 
             // build the custom hostname verifier
             pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
