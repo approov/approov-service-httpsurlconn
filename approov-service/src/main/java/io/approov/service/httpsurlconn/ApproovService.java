@@ -888,11 +888,12 @@ public class ApproovService {
             return request;
 
         try {
-            // update the data hash based on any token binding header if it is available
+            // update the data hash based on any token binding header if it is configured.
+            // If the header is missing from the request, headerValue is null, which explicitly
+            // clears the state in the SDK, preventing stale binding data from being reused.
             if (bindingHeader != null) {
                 String headerValue = request.getRequestProperty(bindingHeader);
-                if (headerValue != null)
-                    Approov.setDataHashInToken(headerValue);
+                Approov.setDataHashInToken(headerValue);
             }
 
             String url = request.getURL().toString();
