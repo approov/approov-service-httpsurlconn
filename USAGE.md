@@ -198,7 +198,7 @@ To disable signing, remove the signer (`setServiceMutator(null)`) or return `nul
 
 ### Body Digests and Payload Signing
 
-Because `HttpsURLConnection` natively obscures the outgoing body stream until it's written, the standard `addApproov(connection)` method cannot automatically compute a `Signature-Base-Digest` over your request body payload.
+Because `HttpsURLConnection` natively obscures the outgoing body stream until it's written, the standard `addApproov(connection)` method cannot automatically compute a `Content-Digest` over your request body payload.
 
 If you require body digest signing (for `POST`, `PUT`, or `PATCH` payloads), you must use the overloaded `addApproov` method, passing in the exact byte payload.
 

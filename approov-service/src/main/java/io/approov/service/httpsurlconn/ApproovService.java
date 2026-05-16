@@ -94,10 +94,63 @@ public class ApproovService {
     // set of URL regexs that should be excluded from any Approov protection, mapped to the compiled Pattern
     private static Map<String, Pattern> exclusionURLRegexs = null;
 
+    // state of the service layer
+    private static boolean isInitialized = false;
+    private static String configString = null;
+
     /**
      * Construction is disallowed as this is a static only class.
      */
     private ApproovService() {
+    }
+
+    /**
+     * Initializes the ApproovService with an account configuration and comment.
+     *
+     * @param context the Application context
+     * @param config the configuration string, or empty for no SDK initialization
+     * @param comment the comment string, or empty for no comment
+     */
+    public static synchronized void initialize(Context context, String config, String comment) {
+        // check if the Approov SDK is already initialized
+        boolean allowEnableAfterEmptyInitialization = isInitialized && (configString != null) && configString.isEmpty() && !config.isEmpty();
+        if (isInitialized && !comment.startsWith("reinit") && !allowEnableAfterEmptyInitialization) {
+            if (!config.equals(configString)) {
+                throw new IllegalStateException("ApproovService layer is already initialized.");
+            }
+            Log.d(TAG, "Ignoring multiple ApproovService layer initializations with the same config");
+        } else {
+            // setup for using Approov
+            isInitialized = false;
+            pinningHostnameVerifier = null;
+            useApproovStatusIfNoToken = false;
+            approovTokenHeader = "Approov-Token";
+            approovTokenPrefix = "";
+            approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
+            bindingHeader = null;
+            substitutionHeaders = new HashMap<>();
+            substitutionQueryParams = new HashMap<>();
+            exclusionURLRegexs = new HashMap<>();
+            serviceMutator = ApproovServiceMutator.DEFAULT;
+
+            // initialize the Approov SDK
+            try {
+                if (!config.isEmpty())
+                    Approov.initialize(context.getApplicationContext(), config, "auto", comment);
+                Approov.setUserProperty("approov-service-httpsurlconn");
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Approov initialization failed: " + e.getMessage());
+                throw e;
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Approov initialization failed: " + e.getMessage());
+                throw e;
+            }
+
+            // build the custom hostname verifier
+            pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+            isInitialized = true;
+            configString = config;
+        }
     }
 
     /**
@@ -107,29 +160,27 @@ public class ApproovService {
      * @param config the configuration string, or empty for no SDK initialization
      */
     public static void initialize(Context context, String config) {
-        // setup for using Approov
-        pinningHostnameVerifier = null;
-        useApproovStatusIfNoToken = false;
-        approovTokenHeader = "Approov-Token";
-        approovTokenPrefix = "";
-        approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
-        bindingHeader = null;
-        substitutionHeaders = new HashMap<>();
-        substitutionQueryParams = new HashMap<>();
-        exclusionURLRegexs = new HashMap<>();
-        serviceMutator = ApproovServiceMutator.DEFAULT;
-        // initialize the Approov SDK
-        try {
-            if (config.length() != 0)
-                Approov.initialize(context, config, "auto", null);
-            Approov.setUserProperty("approov-service-httpsurlconn");
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Approov initialization failed: " + e.getMessage());
-            return;
-        }
+        initialize(context, config, "");
+    }
 
-        // build the custom hostname verifier
-        pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+    /**
+     * Indicates whether the service layer has been initialized.
+     *
+     * @return true if the service layer has been initialized, false otherwise
+     */
+    public static synchronized boolean isInitialized() {
+        return isInitialized;
+    }
+
+    /**
+     * Indicates whether Approov protection is enabled for this service layer
+     * instance. If initialization used an empty config string then the layer is
+     * initialized but Approov protection is bypassed.
+     *
+     * @return true if Approov protection is enabled, false otherwise
+     */
+    static synchronized boolean isApproovEnabled() {
+        return isInitialized && (configString != null) && !configString.isEmpty();
     }
 
     /**
@@ -233,7 +284,7 @@ public class ApproovService {
      * @param requiredPrefix is any required prefix to the value being substituted or null if not required
      */
     public static synchronized void addSubstitutionHeader(String header, String requiredPrefix) {
-        if (pinningHostnameVerifier != null) {
+        if (isInitialized) {
             Log.d(TAG, "addSubstitutionHeader " + header + ", " + requiredPrefix);
             if (requiredPrefix == null)
                 substitutionHeaders.put(header, "");
@@ -248,7 +299,7 @@ public class ApproovService {
      * @param header is the header to be removed for substitution
      */
     public static synchronized void removeSubstitutionHeader(String header) {
-        if (pinningHostnameVerifier != null) {
+        if (isInitialized) {
             Log.d(TAG, "removeSubstitutionHeader " + header);
             substitutionHeaders.remove(header);
         }
@@ -263,7 +314,7 @@ public class ApproovService {
      * @param key is the query parameter key name to be added for substitution
      */
     public static synchronized void addSubstitutionQueryParam(String key) {
-        if (pinningHostnameVerifier != null) {
+        if (isInitialized) {
             Log.d(TAG, "addSubstitutionQueryParam " + key);
             try {
                 Pattern pattern = Pattern.compile("[\\?&]" + key + "=([^&;]+)");
@@ -280,7 +331,7 @@ public class ApproovService {
      * @param key is the query parameter key name to be removed for substitution
      */
     public static synchronized void removeSubstitutionQueryParam(String key) {
-        if (pinningHostnameVerifier != null) {
+        if (isInitialized) {
             Log.d(TAG, "removeSubstitutionQueryParam " + key);
             substitutionQueryParams.remove(key);
         }
@@ -310,7 +361,7 @@ public class ApproovService {
      * @param urlRegex is the regular expression that will be compared against URLs to exclude them
      */
     public static synchronized void addExclusionURLRegex(String urlRegex) {
-        if (pinningHostnameVerifier != null) {
+        if (isInitialized) {
             try {
                 Pattern pattern = Pattern.compile(urlRegex);
                 exclusionURLRegexs.put(urlRegex, pattern);
@@ -327,7 +378,7 @@ public class ApproovService {
      * @param urlRegex is the regular expression that will be compared against URLs to exclude them
      */
     public static synchronized void removeExclusionURLRegex(String urlRegex) {
-        if (pinningHostnameVerifier != null) {
+        if (isInitialized) {
             Log.d(TAG, "removeExclusionURLRegex " + urlRegex);
             exclusionURLRegexs.remove(urlRegex);
         }
@@ -380,7 +431,7 @@ public class ApproovService {
      * use cached data.
      */
     public static synchronized void prefetch() {
-        if (pinningHostnameVerifier != null)
+        if (isInitialized)
             // fetch an Approov token using a placeholder domain
             Approov.fetchApproovToken(new PrefetchCallbackHandler(), "approov.io");
     }
@@ -798,7 +849,7 @@ public class ApproovService {
      */
     public static synchronized HttpsURLConnection addApproov(HttpsURLConnection request, byte[] bodyBytes) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
 
         ApproovServiceMutator mutator = getServiceMutator();
@@ -895,7 +946,7 @@ public class ApproovService {
      */
     public static synchronized URL substituteQueryParams(URL url) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
 
         ApproovServiceMutator mutator = getServiceMutator();
@@ -957,7 +1008,7 @@ public class ApproovService {
      */
     public static synchronized URL substituteQueryParam(URL url, String queryParameter) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
 
         ApproovServiceMutator mutator = getServiceMutator();
