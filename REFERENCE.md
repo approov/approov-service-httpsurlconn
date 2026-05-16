@@ -158,6 +158,8 @@ void removeSubstitutionHeader(String header)
 ## AddSubstitutionQueryParam
 Adds a `key` name for a query parameter that should be subject to [secure strings](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) substitution. This means that if the query parameter is present in a URL then the value will be used as a key to look up a secure string value which will be substituted into the query parameter value instead. This allows easy migration to the use of secure strings.
 
+> **Note**: The service layer inserts secure strings into the URL exactly as they are returned by the Approov cloud. It does **not** automatically apply URL encoding. If your secure strings contain reserved characters (like `&`, `=`, `#`, or spaces), you must ensure they are properly URL-encoded when adding them via the Approov CLI to avoid mangling the query parameters.
+
 ```Java
 void addSubstitutionQueryParam(String key)
 ```

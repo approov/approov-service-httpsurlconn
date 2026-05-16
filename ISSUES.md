@@ -95,9 +95,9 @@ Recommended fix: either remove query substitution metadata from the
 HttpsURLConnection mutation contract, or provide a small wrapper/result type if
 that metadata is expected to be consumed by mutators.
 
-### 15. Query substitution inserts raw secure strings into URLs
+### ~~15. Query substitution inserts raw secure strings into URLs~~
 
-Severity: P3
+Severity: ~~P3~~ **Fixed (via documentation)**
 
 `substituteQueryParams` and `substituteQueryParam` replace the matched query value
 with the raw secure string:
@@ -112,6 +112,8 @@ invalid, or sign/send a different request from the developer's intent.
 Recommended fix: clarify whether secure strings for query substitution must already
 be URL-encoded. If not, encode replacement values as query parameter values rather
 than raw URL substrings. Add tests for reserved characters.
+
+**Resolution**: Fixed via documentation. Adding URL encoding inside the SDK would be a breaking change for existing users who already safely stored pre-encoded strings. `USAGE.md` and `REFERENCE.md` have been updated with explicit warnings that secure strings meant for query parameters must be properly URL-encoded by the user when added via the Approov CLI to avoid mangling the request URL.
 
 ### ~~18. Requirements, docs, and tests disagree on some token/status outcomes~~
 

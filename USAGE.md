@@ -280,6 +280,8 @@ HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 connection = ApproovService.addApproov(connection);
 ```
 
+> **Note**: The service layer inserts secure strings into the URL exactly as they are returned by the Approov cloud. It does **not** automatically apply URL encoding. If your secure strings contain reserved characters (like `&`, `=`, `#`, or spaces), you must ensure they are properly URL-encoded when adding them via the Approov CLI to avoid mangling the query parameters.
+
 ## Token Binding
 
 [Token Binding](https://ext.approov.io/docs/latest/approov-usage-documentation/#token-binding) allows you to bind the Approov token to a specific piece of data, such as an OAuth token or a user session identifier. This adds an extra layer of security by ensuring that the Approov token can only be used in conjunction with the bound data. The `ApproovService` calculates a hash of the binding data locally and supplies that hash to Approov so the resulting token can carry the corresponding `pay` claim. It is important to note that the actual binding data is never sent to the Approov cloud service; only the hash is transmitted.
