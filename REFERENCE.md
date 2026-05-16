@@ -20,7 +20,27 @@ void initialize(Context context, String config)
 
 The [application context](https://developer.android.com/reference/android/content/Context#getApplicationContext()) must be provided using the `context` parameter.
 
+An overload is also provided to include a `comment`:
+
+```Java
+void initialize(Context context, String config, String comment)
+```
+
 It is possible to pass an empty `config` string to indicate that no initialization is required. Only do this if you are also using a different Approov quickstart in your app (which will use the same underlying Approov SDK) and this will have been initialized first.
+
+## IsInitialized
+Checks if the Approov SDK has been successfully initialized.
+
+```Java
+boolean isInitialized()
+```
+
+## IsApproovEnabled
+Checks if the Approov SDK has been initialized with a valid (non-empty) configuration.
+
+```Java
+boolean isApproovEnabled()
+```
 
 ## AddApproov
 Adds Approov to the given `connection`. The Approov token is added in a header and this also overrides the HostnameVerifier with something that pins the connections. If a binding header has been specified then its hash will be set if it is present. This function may also substitute header values to hold secure string secrets. If it is not possible to fetch an Approov token due to networking issues, or header substitution fails due to attestation rejection, then `ApproovException` is thrown. Returns the configured connection.
@@ -98,6 +118,20 @@ Sets the `header` that the Approov token is added on, as well as an optional `pr
 
 ```Java
 void setApproovHeader(String header, String prefix)
+```
+
+## SetApproovTraceIDHeader
+Sets the `header` name that is used to pass any optional Approov TraceID debug value. By default the TraceID is provided on `Approov-TraceID` if one is available. Passing `null` disables adding the TraceID header.
+
+```Java
+void setApproovTraceIDHeader(String header)
+```
+
+## GetApproovTraceIDHeader
+Returns the name of the header used for the Approov TraceID, or `null` if it is disabled.
+
+```Java
+String getApproovTraceIDHeader()
 ```
 
 ## SetBindingHeader
