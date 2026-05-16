@@ -23,3 +23,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Deprecated
 - `setProceedOnNetworkFail()` and `getProceedOnNetworkFail()` in favor of `ApproovServiceMutator` policies.
 - `getMessageSignature(message)` in favor of the specialized `getAccountMessageSignature` and `getInstallMessageSignature` methods.
+
+### Fixed
+- Prevented `NullPointerException` in `SignatureParametersFactory` by safely initializing optional headers (Issue #8).
+- Ensured `addApproov` immediately returns the connection object when processing is skipped (Issue #9).
+- Removed static global pinning verifier in favor of safe dynamic per-request wrapping (Issue #10).
+- Wrapped native SDK calls in request paths to correctly translate unchecked SDK exceptions into `ApproovException` (Issue #11).
+- Explicitly clear token binding state when the configured binding header is absent from a request, preventing stale `pay` claims (Issue #12).
+- Emptied the implementation of the deprecated `getMessageSignature` method (Issue #13).
