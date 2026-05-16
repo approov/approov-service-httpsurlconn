@@ -32,6 +32,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -297,9 +298,9 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
 
         // Calculate the signature and message descriptor headers
         // Correct (byte sequence item):
-        String sigHeader = Dictionary.valueOf(Map.of(
+        String sigHeader = Dictionary.valueOf(Collections.singletonMap(
                 sigId, ByteSequenceItem.valueOf(signature))).serialize();
-        String sigInputHeader = Dictionary.valueOf(Map.of(
+        String sigInputHeader = Dictionary.valueOf(Collections.singletonMap(
                 sigId, params.toComponentValue())).serialize();
 
         // HttpURLConnection doesn't have a removeHeader function
@@ -317,7 +318,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             try {
                 MessageDigest digestBuilder = MessageDigest.getInstance("SHA-256");
                 byte[] digest = digestBuilder.digest(message.getBytes(StandardCharsets.UTF_8));
-                String digestHeader = Dictionary.valueOf(Map.of(
+                String digestHeader = Dictionary.valueOf(Collections.singletonMap(
                         DIGEST_SHA256, ByteSequenceItem.valueOf(digest))).serialize();
                 request.setRequestProperty("Signature-Base-Digest", digestHeader);
             } catch (NoSuchAlgorithmException e) {
