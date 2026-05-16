@@ -242,7 +242,12 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                     Log.d(TAG, "InstallMessageSignature is empty - skipping message signing");
                     return request;
                 }
-                signature = decodeBase64(base64);
+                try {
+                    signature = decodeBase64(base64);
+                } catch (Exception e) {
+                    Log.d(TAG, "Failed to decode base64 signature - skipping message signing " + e);
+                    return request;
+                }
                 // decode the signature from ASN.1 DER format
                 try (ASN1InputStream asn1InputStream = new ASN1InputStream(signature)) {
                     ASN1Sequence sequence = (ASN1Sequence) asn1InputStream.readObject();
@@ -254,17 +259,34 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                         System.arraycopy(rBytes, 0, signature, 0, rBytes.length);
                         System.arraycopy(sBytes, 0, signature, rBytes.length, sBytes.length);
                     } else {
-                        throw new IllegalStateException("Not an ASN1Sequence");
+                        Log.d(TAG, "Not an ASN1Sequence - skipping message signing");
+                        return request;
                     }
                 } catch (Exception e) {
-                    throw new IllegalStateException("Failed to decode ASN.1 DER ES256 signature", e);
+                    Log.d(TAG, "Failed to decode ASN.1 DER ES256 signature - skipping message signing", e);
+                    return request;
                 }
                 break;
             }
             case ALG_HS256: {
                 sigId = "account";
-                String base64 = getAccountMessageSignature(message);
-                signature = decodeBase64(base64);
+                String base64;
+                try {
+                    base64 = getAccountMessageSignature(message);
+                } catch (ApproovException e) {
+                    Log.d(TAG, "Failed to get AccountMessageSignature - skipping message signing " + e);
+                    return request;
+                }
+                if (base64.isEmpty()) {
+                    Log.d(TAG, "AccountMessageSignature is empty - skipping message signing");
+                    return request;
+                }
+                try {
+                    signature = decodeBase64(base64);
+                } catch (Exception e) {
+                    Log.d(TAG, "Failed to decode base64 signature - skipping message signing " + e);
+                    return request;
+                }
                 break;
             }
             default:

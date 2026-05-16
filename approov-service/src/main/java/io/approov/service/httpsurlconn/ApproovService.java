@@ -87,6 +87,10 @@ public class ApproovService {
     // required prefixes
     private static Map<String, String> substitutionHeaders = null;
 
+    // map of query parameters that should have their values substituted for secure strings,
+    // mapped to the compiled Pattern
+    private static Map<String, Pattern> substitutionQueryParams = null;
+
     // set of URL regexs that should be excluded from any Approov protection, mapped to the compiled Pattern
     private static Map<String, Pattern> exclusionURLRegexs = null;
 
@@ -111,6 +115,7 @@ public class ApproovService {
         approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
         bindingHeader = null;
         substitutionHeaders = new HashMap<>();
+        substitutionQueryParams = new HashMap<>();
         exclusionURLRegexs = new HashMap<>();
         serviceMutator = ApproovServiceMutator.DEFAULT;
         // initialize the Approov SDK
@@ -250,6 +255,47 @@ public class ApproovService {
     }
 
     /**
+     * Adds a key name for a query parameter that should be subject to secure strings substitution.
+     * This means that if the query parameter is present in a URL then the value will be used as a
+     * key to look up a secure string value which will be substituted into the query parameter value
+     * instead. This allows easy migration to the use of secure strings.
+     *
+     * @param key is the query parameter key name to be added for substitution
+     */
+    public static synchronized void addSubstitutionQueryParam(String key) {
+        if (pinningHostnameVerifier != null) {
+            Log.d(TAG, "addSubstitutionQueryParam " + key);
+            try {
+                Pattern pattern = Pattern.compile("[\\?&]" + key + "=([^&;]+)");
+                substitutionQueryParams.put(key, pattern);
+            } catch (PatternSyntaxException e) {
+                Log.e(TAG, "addSubstitutionQueryParam " + key + " error: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Removes a query parameter key name previously added using addSubstitutionQueryParam.
+     *
+     * @param key is the query parameter key name to be removed for substitution
+     */
+    public static synchronized void removeSubstitutionQueryParam(String key) {
+        if (pinningHostnameVerifier != null) {
+            Log.d(TAG, "removeSubstitutionQueryParam " + key);
+            substitutionQueryParams.remove(key);
+        }
+    }
+
+    /**
+     * Gets the map of substitution query parameters.
+     *
+     * @return a map of query parameters to be substituted, mapped to the compiled Pattern
+     */
+    public static synchronized Map<String, Pattern> getSubstitutionQueryParams() {
+        return new HashMap<>(substitutionQueryParams);
+    }
+
+    /**
      * Adds an exclusion URL regular expression. If a URL for a request matches this regular expression
      * then it will not be subject to any Approov protection. Note that this facility must be used with
      * EXTREME CAUTION due to the impact of dynamic pinning. Pinning may be applied to all domains added
@@ -362,22 +408,8 @@ public class ApproovService {
             throw new ApproovException("IllegalArgument: " + e.getMessage());
         }
 
-        // process the returned Approov status
-        if (approovResults.getStatus() == Approov.TokenFetchStatus.REJECTED)
-            // if the request is rejected then we provide a special exception with additional information
-            throw new ApproovRejectionException("precheck: " + approovResults.getStatus().toString() + ": " +
-                    approovResults.getARC() + " " + approovResults.getRejectionReasons(),
-                    approovResults.getARC(), approovResults.getRejectionReasons());
-        else if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED))
-            // we are unable to get the secure string due to network conditions so the request can
-            // be retried by the user later
-            throw new ApproovNetworkException("precheck: " + approovResults.getStatus().toString());
-        else if ((approovResults.getStatus() != Approov.TokenFetchStatus.SUCCESS) &&
-                (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_KEY))
-            // we are unable to get the secure string due to a more permanent error
-            throw new ApproovException("precheck:" + approovResults.getStatus().toString());
+        // process the returned Approov status via the mutator
+        getServiceMutator().handlePrecheckResult(approovResults);
     }
 
     /**
@@ -450,17 +482,8 @@ public class ApproovService {
         }
 
         // process the status
-        if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED))
-            // we are unable to get the token due to network conditions
-            throw new ApproovNetworkException("fetchToken: " + approovResults.getStatus().toString());
-        else if (approovResults.getStatus() != Approov.TokenFetchStatus.SUCCESS)
-            // we are unable to get the token due to a more permanent error
-            throw new ApproovException("fetchToken: " + approovResults.getStatus().toString());
-        else
-            // provide the Approov token result
-            return approovResults.getToken();
+        getServiceMutator().handleFetchTokenResult(approovResults);
+        return approovResults.getToken();
     }
 
     /**
@@ -527,25 +550,8 @@ public class ApproovService {
             throw new ApproovException("IllegalArgument: " + e.getMessage());
         }
 
-        // process the returned Approov status
-        if (approovResults.getStatus() == Approov.TokenFetchStatus.REJECTED)
-            // if the request is rejected then we provide a special exception with additional information
-            throw new ApproovRejectionException("fetchSecureString " + type + " for " + key + ": " +
-                    approovResults.getStatus().toString() + ": " + approovResults.getARC() +
-                    " " + approovResults.getRejectionReasons(),
-                    approovResults.getARC(), approovResults.getRejectionReasons());
-        else if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED))
-            // we are unable to get the secure string due to network conditions so the request can
-            // be retried by the user later
-            throw new ApproovNetworkException("fetchSecureString " + type + " for " + key + ":" +
-                    approovResults.getStatus().toString());
-        else if ((approovResults.getStatus() != Approov.TokenFetchStatus.SUCCESS) &&
-                (approovResults.getStatus() != Approov.TokenFetchStatus.UNKNOWN_KEY))
-            // we are unable to get the secure string due to a more permanent error
-            throw new ApproovException("fetchSecureString " + type + " for " + key + ":" +
-                    approovResults.getStatus().toString());
+        // process the returned Approov status via the mutator
+        getServiceMutator().handleFetchSecureStringResult(approovResults, type, key);
         return approovResults.getSecureString();
     }
 
@@ -574,21 +580,8 @@ public class ApproovService {
             throw new ApproovException("IllegalArgument: " + e.getMessage());
         }
 
-        // process the returned Approov status
-        if (approovResults.getStatus() == Approov.TokenFetchStatus.REJECTED)
-            // if the request is rejected then we provide a special exception with additional information
-            throw new ApproovRejectionException("fetchCustomJWT: "+ approovResults.getStatus().toString() + ": " +
-                    approovResults.getARC() +  " " + approovResults.getRejectionReasons(),
-                    approovResults.getARC(), approovResults.getRejectionReasons());
-        else if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) ||
-                (approovResults.getStatus() == Approov.TokenFetchStatus.MITM_DETECTED))
-            // we are unable to get the custom JWT due to network conditions so the request can
-            // be retried by the user later
-            throw new ApproovNetworkException("fetchCustomJWT: " + approovResults.getStatus().toString());
-        else if (approovResults.getStatus() != Approov.TokenFetchStatus.SUCCESS)
-            // we are unable to get the custom JWT due to a more permanent error
-            throw new ApproovException("fetchCustomJWT: " + approovResults.getStatus().toString());
+        // process the returned Approov status via the mutator
+        getServiceMutator().handleFetchCustomJWTResult(approovResults);
         return approovResults.getToken();
     }
 
@@ -817,13 +810,9 @@ public class ApproovService {
         // the same domain is used for an Approov protected request and the same request is live
         request.setHostnameVerifier(pinningHostnameVerifier);
 
-        // check if the URL matches one of the exclusion regexs and just return if so
-        String url = request.getURL().toString();
-        for (Pattern pattern: exclusionURLRegexs.values()) {
-            Matcher matcher = pattern.matcher(url);
-            if (matcher.find())
-                return mutator.handleInterceptorProcessedRequest(request, requestMutations);
-        }
+        // check if the request should be processed by the mutator (this also checks exclusions)
+        if (!mutator.handleInterceptorShouldProcessConnection(request))
+            return mutator.handleInterceptorProcessedRequest(request, requestMutations);
 
         // update the data hash based on any token binding header if it is available
         if (bindingHeader != null) {
@@ -879,8 +868,11 @@ public class ApproovService {
                 Log.d(TAG, "Substituting header: " + header + ", " + approovResults.getStatus().toString());
                 if (mutator.handleInterceptorHeaderSubstitutionResult(approovResults, header)) {
                     // perform the header substitution
-                    request.setRequestProperty(header, prefix + approovResults.getSecureString());
-                    substitutedHeaderKeys.add(header);
+                    String secureString = approovResults.getSecureString();
+                    if (secureString != null && !secureString.isEmpty()) {
+                        request.setRequestProperty(header, prefix + secureString);
+                        substitutedHeaderKeys.add(header);
+                    }
                 }
             }
         }
@@ -889,6 +881,63 @@ public class ApproovService {
             requestMutations.setSubstitutionHeaderKeys(substitutedHeaderKeys);
 
         return mutator.handleInterceptorProcessedRequest(request, requestMutations);
+    }
+
+    /**
+     * Substitutes all registered query parameters in the URL. If no substitutions are made then the
+     * original URL is returned, otherwise a new one is constructed with the revised query
+     * parameter values. Since this modifies the URL itself this must be done before opening the
+     * HttpsURLConnection.
+     *
+     * @param url is the URL being analyzed for substitution
+     * @return URL passed in, or modified with a new URL if required
+     * @throws ApproovException if it is not possible to obtain secure strings for substitution
+     */
+    public static synchronized URL substituteQueryParams(URL url) throws ApproovException {
+        // throw if we couldn't initialize the SDK
+        if (pinningHostnameVerifier == null)
+            throw new ApproovException("Approov not initialized");
+
+        ApproovServiceMutator mutator = getServiceMutator();
+
+        // check if the URL matches one of the exclusion regexs and just return if so
+        String urlString = url.toString();
+        for (Pattern pattern: exclusionURLRegexs.values()) {
+            Matcher matcher = pattern.matcher(urlString);
+            if (matcher.find())
+                return url;
+        }
+
+        boolean isModified = false;
+        String replacementURL = urlString;
+        
+        for (Map.Entry<String, Pattern> entry : substitutionQueryParams.entrySet()) {
+            String queryKey = entry.getKey();
+            Pattern pattern = entry.getValue();
+            Matcher matcher = pattern.matcher(replacementURL);
+            if (matcher.find()) {
+                String queryValue = matcher.group(1);
+                Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
+                Log.d(TAG, "Substituting query parameter: " + queryKey + ", " + approovResults.getStatus().toString());
+                if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryKey)) {
+                    String secureString = approovResults.getSecureString();
+                    if (secureString != null && !secureString.isEmpty()) {
+                        replacementURL = new StringBuilder(replacementURL).replace(matcher.start(1),
+                                matcher.end(1), secureString).toString();
+                        isModified = true;
+                    }
+                }
+            }
+        }
+        
+        if (isModified) {
+            try {
+                return new URL(replacementURL);
+            } catch(MalformedURLException e) {
+                Log.d(TAG, "Substituting query parameters exception: " + e.toString());
+            }
+        }
+        return url;
     }
 
     /**
@@ -932,13 +981,16 @@ public class ApproovService {
             Log.d(TAG, "Substituting query parameter: " + queryParameter + ", " + approovResults.getStatus().toString());
             if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryParameter)) {
                 // perform a query substitution
-                try {
-                    return new URL(new StringBuilder(urlString).replace(matcher.start(1),
-                            matcher.end(1), approovResults.getSecureString()).toString());
-                }
-                catch(MalformedURLException e) {
-                    Log.d(TAG, "Substituting query parameter exception: " + e.toString());
-                    return url;
+                String secureString = approovResults.getSecureString();
+                if (secureString != null && !secureString.isEmpty()) {
+                    try {
+                        return new URL(new StringBuilder(urlString).replace(matcher.start(1),
+                                matcher.end(1), secureString).toString());
+                    }
+                    catch(MalformedURLException e) {
+                        Log.d(TAG, "Substituting query parameter exception: " + e.toString());
+                        return url;
+                    }
                 }
             }
         }

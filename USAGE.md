@@ -230,6 +230,46 @@ connection.getOutputStream().write(bodyBytes);
 
 > **Note**: This overload is designed for repeatable/in-memory payloads. It cannot support true streaming or one-shot uploads. If you are streaming large files, you must configure your Approov account to make `Content-Digest` optional and use the standard `addApproov(connection)` method.
 
+## Secure Strings
+
+Approov allows you to protect your secret API keys and tokens by keeping them out of your app's code entirely. Instead, you use placeholder values in your headers or query parameters, and Approov replaces them with the real [Secure Strings](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) at runtime if attestation succeeds.
+
+### Header Substitution
+
+You can configure the service layer to automatically substitute headers. Just register the header name and an optional prefix (like "Bearer "):
+
+```java
+ApproovService.addSubstitutionHeader("Api-Key", null);
+ApproovService.addSubstitutionHeader("Authorization", "Bearer ");
+```
+
+When you call `addApproov(connection)`, the service layer will transparently swap any placeholder value in those headers with the actual secret retrieved from the Approov cloud.
+
+### Query Parameter Substitution (HttpsURLConnection Requirement)
+
+Unlike headers, the `HttpsURLConnection` API does not allow you to change a request URL once the connection is opened. Because of this, **query parameter substitutions must be performed on the `URL` object before you call `openConnection()`**.
+
+To use query parameter substitution, you first register the parameters:
+
+```java
+ApproovService.addSubstitutionQueryParam("api_key");
+```
+
+Then, you must construct the connection using `ApproovService.substituteQueryParams(url)`:
+
+```java
+URL url = new URL("https://api.example.com/data?api_key=PLACEHOLDER");
+
+// MUST substitute query parameters BEFORE opening the connection
+url = ApproovService.substituteQueryParams(url);
+
+// Now open the connection using the modified URL
+HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+
+// Then apply standard Approov token injection and header substitutions
+connection = ApproovService.addApproov(connection);
+```
+
 ## Token Binding
 
 [Token Binding](https://ext.approov.io/docs/latest/approov-usage-documentation/#token-binding) allows you to bind the Approov token to a specific piece of data, such as an OAuth token or a user session identifier. This adds an extra layer of security by ensuring that the Approov token can only be used in conjunction with the bound data. The `ApproovService` calculates a hash of the binding data locally and supplies that hash to Approov so the resulting token can carry the corresponding `pay` claim. It is important to note that the actual binding data is never sent to the Approov cloud service; only the hash is transmitted.

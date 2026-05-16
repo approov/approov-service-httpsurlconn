@@ -29,6 +29,12 @@ Adds Approov to the given `connection`. The Approov token is added in a header a
 HttpsURLConnection addApproov(HttpsURLConnection request) throws ApproovException
 ```
 
+An overload is provided that also takes a `bodyBytes` parameter. This is used for [message signing](https://approov.io/docs/latest/approov-usage-documentation/#message-signing) to compute a SHA-256 digest of the payload and include it in the signed message. It also adds the `Content-Digest` header to the request. Because `HttpsURLConnection` is a streaming API, you must buffer the payload in memory to pass it to this method before writing it to the connection's output stream.
+
+```Java
+HttpsURLConnection addApproov(HttpsURLConnection request, byte[] bodyBytes) throws ApproovException
+```
+
 ## SetServiceMutator
 Sets the mutator that should be used to customize Approov behavior. This allows you to override default behavior such as what happens when there is a network error fetching a token, or how to customize pinning and header substitution logic.
 
@@ -115,8 +121,36 @@ Removes a `header` previously added using `addSubstitutionHeader`.
 void removeSubstitutionHeader(String header)
 ```
 
+## AddSubstitutionQueryParam
+Adds a `key` name for a query parameter that should be subject to [secure strings](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) substitution. This means that if the query parameter is present in a URL then the value will be used as a key to look up a secure string value which will be substituted into the query parameter value instead. This allows easy migration to the use of secure strings.
+
+```Java
+void addSubstitutionQueryParam(String key)
+```
+
+## RemoveSubstitutionQueryParam
+Removes a `key` previously added using `addSubstitutionQueryParam`.
+
+```Java
+void removeSubstitutionQueryParam(String key)
+```
+
+## GetSubstitutionQueryParams
+Gets the map of substitution query parameters currently configured.
+
+```Java
+Map<String, Pattern> getSubstitutionQueryParams()
+```
+
+## SubstituteQueryParams
+Substitutes all registered query parameters in the `url`. If no substitutions are made then the original URL is returned, otherwise a new one is constructed with the revised query parameter values. **Because `HttpsURLConnection` does not allow modifying a URL after the connection is opened, this method MUST be called on your URL before you call `openConnection()`.** If it is not possible to fetch secure strings then an `ApproovException` is thrown.
+
+```Java
+URL substituteQueryParams(URL url) throws ApproovException
+```
+
 ## SubstituteQueryParam
-Substitutes the given `queryParameter` in the `url`. If no substitution is made then the original URL is returned, otherwise a new one is constructed with the revised query parameter value. Since this modifies the URL itself this must be done before opening the `HttpsURLConnection`. If it is not possible to fetch secure strings then an `ApproovException` is thrown.
+*(Deprecated)* Substitutes a single given `queryParameter` in the `url`. Like `substituteQueryParams`, this **MUST** be done before opening the `HttpsURLConnection`. 
 
 ```Java
 URL substituteQueryParam(URL url, String queryParameter) throws ApproovException
