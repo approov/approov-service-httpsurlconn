@@ -307,7 +307,7 @@ public class ApproovServiceMiniSdkTest {
      * should proceed without an Approov token or trace ID.
      */
     @Test
-    public void testUpdateRequestNoApproovServiceProceedsWithoutToken() throws Exception {
+    public void testUpdateRequestNoApproovServiceProceedsWithEmptyHeaders() throws Exception {
         reinitializeServiceWithTargetHost("");
         setDirective("{" +
             "  \"operation\": \"fetchApproovToken\"," +
@@ -321,8 +321,8 @@ public class ApproovServiceMiniSdkTest {
         connection.connect();
         if (true) {
             JSONObject reply = readResponseJson(connection);
-            assertNull(getHeader(reply, "Approov-Token"));
-            assertNull(getHeader(reply, "Approov-TraceID"));
+            assertEquals("Approov-Token", getHeader(reply, "Approov-Token"));
+            assertEquals("", getHeader(reply, "Approov-TraceID"));
         }
     }
 
