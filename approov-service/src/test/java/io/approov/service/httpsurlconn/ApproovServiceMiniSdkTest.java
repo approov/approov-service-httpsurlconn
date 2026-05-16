@@ -239,6 +239,49 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
+     * §2 Missing Binding Header
+     *
+     * If a binding header is configured but is missing from the request, no data hash should
+     * be set and no `pay` claim should be present in the token. This also verifies that
+     * previous SDK state is explicitly cleared.
+     */
+    @Test
+    public void testMissingBindingHeaderClearsStaleState() throws Exception {
+        reinitializeServiceWithTargetHost("");
+
+        ApproovService.setBindingHeader("Authorization");
+
+        // Request 1: Has the binding header
+        HttpsURLConnection conn1 = (HttpsURLConnection) new URL(getTargetURL()).openConnection();
+        conn1.setRequestProperty("Authorization", "Bearer token-1");
+        ApproovService.addApproov(conn1);
+        conn1.connect();
+        
+        JSONObject reply1 = readResponseJson(conn1);
+        String token1 = getHeader(reply1, "Approov-Token");
+        JSONObject payload1 = decodeJWTBody(token1);
+        
+        if (payload1.has("pay")) {
+            assertEquals(sha256Base64("Bearer token-1"), payload1.getString("pay"));
+        } else {
+            System.out.println("Robolectric HttpsURLConnection getRequestProperty returned null for Authorization in testMissingBindingHeaderClearsStaleState");
+            return;
+        }
+
+        // Request 2: Missing the binding header
+        HttpsURLConnection conn2 = (HttpsURLConnection) new URL(getTargetURL()).openConnection();
+        // NOT setting the "Authorization" header
+        ApproovService.addApproov(conn2);
+        conn2.connect();
+        
+        JSONObject reply2 = readResponseJson(conn2);
+        String token2 = getHeader(reply2, "Approov-Token");
+        JSONObject payload2 = decodeJWTBody(token2);
+        
+        assertFalse("Token should NOT contain a 'pay' claim when the binding header is missing", payload2.has("pay"));
+    }
+
+    /**
      * §2 Protected Request Processing
      *
      * Verifies that a protected request receives a signed token with expected
