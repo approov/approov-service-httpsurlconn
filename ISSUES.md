@@ -240,9 +240,9 @@ Recommended fix: clarify whether secure strings for query substitution must alre
 be URL-encoded. If not, encode replacement values as query parameter values rather
 than raw URL substrings. Add tests for reserved characters.
 
-### 18. Requirements, docs, and tests disagree on some token/status outcomes
+### ~~18. Requirements, docs, and tests disagree on some token/status outcomes~~
 
-Severity: P3
+Severity: ~~P3~~ **Fixed**
 
 The current requirements say:
 
@@ -280,6 +280,8 @@ Recommended fix: decide the intended matrix for each token fetch status:
 
 Then update tests and docs together. This is more of a specification alignment
 issue than a pure implementation bug.
+
+**Resolution**: Fixed in both `httpsurlconn` and `okhttp` repositories. The `NO_APPROOV_SERVICE` state in `ApproovServiceMutator` now explicitly returns `true` (instead of `false`). This guarantees that the service layer correctly emits the empty token header and empty trace header to the backend to formally prove that Approov interception was attempted, fully satisfying the missing-artifacts requirements. The `ApproovServiceMiniSdkTest.java` suite was simultaneously updated to strictly assert `assertNotNull` and `assertEquals("...", getHeader(reply, "Approov-Token"))` instead of expecting a null omission.
 
 ## Test Coverage Gaps
 
@@ -343,5 +345,4 @@ These gaps are relevant to the findings above.
 1. Make `isApproovEnabled()` public and align docs/tests.
 2. Fix initialization state handling: empty config, failed enable-after-empty, and
    repeated `options:` behavior.
-3. Review token fetch status matrix (`MITM_DETECTED`, `NO_APPROOV_SERVICE`, etc.) and ensure trace/token headers are emitted as expected (Issue 18).
-4. Address query substitution mutation metadata and URL encoding for secure strings (Issues 14 & 15).
+3. Address query substitution mutation metadata and URL encoding for secure strings (Issues 14 & 15).
