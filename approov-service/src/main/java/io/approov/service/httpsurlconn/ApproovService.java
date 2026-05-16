@@ -207,6 +207,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static synchronized void setDevKey(String devKey) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         try {
             Approov.setDevKey(devKey);
             Log.d(TAG, "setDevKey");
@@ -431,7 +433,7 @@ public class ApproovService {
      * use cached data.
      */
     public static synchronized void prefetch() {
-        if (isInitialized)
+        if (isApproovEnabled())
             // fetch an Approov token using a placeholder domain
             Approov.fetchApproovToken(new PrefetchCallbackHandler(), "approov.io");
     }
@@ -446,6 +448,8 @@ public class ApproovService {
     //
     // @throws ApproovException if there was a problem
     public static void precheck() throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         // try and fetch a non-existent secure string in order to check for a rejection
         Approov.TokenFetchResult approovResults;
         try {
@@ -472,6 +476,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getDeviceID() throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         try {
             String deviceID = Approov.getDeviceID();
             Log.d(TAG, "getDeviceID: " + deviceID);
@@ -493,6 +499,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static void setDataHashInToken(String data) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         try {
             Approov.setDataHashInToken(data);
             Log.d(TAG, "setDataHashInToken");
@@ -519,6 +527,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchToken(String url) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         // fetch the Approov token
         Approov.TokenFetchResult approovResults;
         try {
@@ -583,6 +593,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchSecureString(String key, String newDef) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         // determine the type of operation as the values themselves cannot be logged
         String type = "lookup";
         if (newDef != null)
@@ -618,6 +630,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchCustomJWT(String payload) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         // fetch the custom JWT catching any exceptions the SDK might throw
         Approov.TokenFetchResult approovResults;
         try {
@@ -645,6 +659,8 @@ public class ApproovService {
      * @return String ARC from last attestation request or empty string if network unavailable
      */
     public static String getLastARC() {
+        if (!isApproovEnabled())
+            return "";
         // Get the dynamic pins from Approov
         Map<String, List<String>> approovPins = Approov.getPins("public-key-sha256");
         if (approovPins == null || approovPins.isEmpty()) {
@@ -692,6 +708,8 @@ public class ApproovService {
      * @throws ApproovException if the attrs parameter is invalid or the SDK is not initialized
      */
     public static void setInstallAttrsInToken(String attrs) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         try {
             Approov.setInstallAttrsInToken(attrs);
             Log.d(TAG, "setInstallAttrsInToken");
@@ -765,6 +783,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getAccountMessageSignature(String message) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         try {
             String signature = Approov.getAccountMessageSignature(message);
             Log.d(TAG, "getAccountMessageSignature");
@@ -798,6 +818,8 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getInstallMessageSignature(String message) throws ApproovException {
+        if (!isApproovEnabled())
+            throw new ApproovException("Approov not initialized");
         try {
             String signature = Approov.getInstallMessageSignature(message);
             Log.d(TAG, "getInstallMessageSignature");
@@ -849,8 +871,8 @@ public class ApproovService {
      */
     public static synchronized HttpsURLConnection addApproov(HttpsURLConnection request, byte[] bodyBytes) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (!isInitialized)
-            throw new ApproovException("Approov not initialized");
+        if (!isApproovEnabled())
+            return request;
 
         ApproovServiceMutator mutator = getServiceMutator();
         ApproovRequestMutations requestMutations = new ApproovRequestMutations();
@@ -871,6 +893,8 @@ public class ApproovService {
             if (headerValue != null)
                 Approov.setDataHashInToken(headerValue);
         }
+
+        String url = request.getURL().toString();
 
         // request an Approov token for the request URL
         Approov.TokenFetchResult approovResults = Approov.fetchApproovTokenAndWait(url);
@@ -946,8 +970,8 @@ public class ApproovService {
      */
     public static synchronized URL substituteQueryParams(URL url) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (!isInitialized)
-            throw new ApproovException("Approov not initialized");
+        if (!isApproovEnabled())
+            return url;
 
         ApproovServiceMutator mutator = getServiceMutator();
 
@@ -1008,8 +1032,8 @@ public class ApproovService {
      */
     public static synchronized URL substituteQueryParam(URL url, String queryParameter) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (!isInitialized)
-            throw new ApproovException("Approov not initialized");
+        if (!isApproovEnabled())
+            return url;
 
         ApproovServiceMutator mutator = getServiceMutator();
 

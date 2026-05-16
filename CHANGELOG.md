@@ -4,14 +4,11 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
-## [Unreleased]
-
-### Added
-- `ApproovService.addApproov(HttpsURLConnection, byte[])` overload to support message signing body digests (`Content-Digest`) for repeatable payloads.
 
 ## [3.5.4] - 2026-05-15
 
 ### Added
+- `ApproovService.addApproov(HttpsURLConnection, byte[])` overload to support message signing body digests (`Content-Digest`) for repeatable payloads.
 - `ApproovServiceMutator` protocol with default behavior to centralize decision points in the service flow.
 - Mutator hooks for precheck, token fetch, secure string fetch, custom JWT fetch, header/query substitutions, and pinning.
 - Configurable HTTP message signing via `ApproovDefaultMessageSigning` and `SignatureParametersFactory` supporting both Install and Account message signatures.
