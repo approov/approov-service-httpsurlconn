@@ -122,3 +122,9 @@ jobs:
         with:
           name: httpsurlconn-test-results
           path: approov-service-httpsurlconn/approov-service/build/reports/tests/testDebugUnitTest/
+
+      - name: Publish Test Report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: 'approov-service-httpsurlconn/approov-service/build/test-results/**/*.xml'
