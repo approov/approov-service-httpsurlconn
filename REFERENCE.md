@@ -155,43 +155,6 @@ Removes a `header` previously added using `addSubstitutionHeader`.
 void removeSubstitutionHeader(String header)
 ```
 
-## AddSubstitutionQueryParam
-Adds a `key` name for a query parameter that should be subject to [secure strings](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) substitution. This means that if the query parameter is present in a URL then the value will be used as a key to look up a secure string value which will be substituted into the query parameter value instead. This allows easy migration to the use of secure strings.
-
-> **Note**: The service layer inserts secure strings into the URL exactly as they are returned by the Approov cloud. It does **not** automatically apply URL encoding. If your secure strings contain reserved characters (like `&`, `=`, `#`, or spaces), you must ensure they are properly URL-encoded when adding them via the Approov CLI to avoid mangling the query parameters.
-
-```Java
-void addSubstitutionQueryParam(String key)
-```
-
-## RemoveSubstitutionQueryParam
-Removes a `key` previously added using `addSubstitutionQueryParam`.
-
-```Java
-void removeSubstitutionQueryParam(String key)
-```
-
-## GetSubstitutionQueryParams
-Gets the map of substitution query parameters currently configured.
-
-```Java
-Map<String, Pattern> getSubstitutionQueryParams()
-```
-
-## SubstituteQueryParams
-Substitutes all registered query parameters in the `url`. If no substitutions are made then the original URL is returned, otherwise a new one is constructed with the revised query parameter values. **Because `HttpsURLConnection` does not allow modifying a URL after the connection is opened, this method MUST be called on your URL before you call `openConnection()`.** If it is not possible to fetch secure strings then an `ApproovException` is thrown.
-
-```Java
-URL substituteQueryParams(URL url) throws ApproovException
-```
-
-## SubstituteQueryParam
-*(Deprecated)* Substitutes a single given `queryParameter` in the `url`. Like `substituteQueryParams`, this **MUST** be done before opening the `HttpsURLConnection`. 
-
-```Java
-URL substituteQueryParam(URL url, String queryParameter) throws ApproovException
-```
-
 ## AddExclusionURLRegex
 Adds an exclusion URL [regular expression](https://regex101.com/) via the `urlRegex` parameter. If a URL for a request matches this regular expression then it will not be subject to any Approov protection.
 

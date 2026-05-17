@@ -257,30 +257,35 @@ When you call `addApproov(connection)`, the service layer will transparently swa
 
 ### Query Parameter Substitution (HttpsURLConnection Requirement)
 
-Unlike headers, the `HttpsURLConnection` API does not allow you to change a request URL once the connection is opened. Because of this, **query parameter substitutions must be performed on the `URL` object before you call `openConnection()`**.
-
-To use query parameter substitution, you first register the parameters:
+Due to the strict immutability of `java.net.URL` objects, the `approov-service-httpsurlconn` layer does not automatically substitute query parameters. If your API requires an Approov Secure String to be passed as a query parameter, you must fetch it manually and construct the URL *before* opening the connection.
 
 ```java
-ApproovService.addSubstitutionQueryParam("api_key");
+try {
+    // 1. Fetch the secure string from Approov
+    String secureApiKey = ApproovService.fetchSecureString("my_api_key_name", null);
+
+    if (secureApiKey == null) {
+        // Handle null case (e.g., feature not enabled or string undefined)
+        throw new Exception("Secure string is null");
+    }
+
+    // 2. Construct your URL manually
+    String baseUrl = "https://api.yourdomain.com/endpoint";
+    URL url = new URL(baseUrl + "?api_key=" + secureApiKey);
+
+    // 3. Open connection and add Approov
+    HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+    ApproovService.addApproov(connection);
+    
+    // 4. Proceed with request...
+
+} catch (io.approov.service.httpsurlconn.ApproovException e) {
+    // Handle Approov-specific fetching errors (e.g., network failure, rejection)
+    e.printStackTrace();
+} catch (Exception e) {
+    e.printStackTrace();
+}
 ```
-
-Then, you must construct the connection using `ApproovService.substituteQueryParams(url)`:
-
-```java
-URL url = new URL("https://api.example.com/data?api_key=PLACEHOLDER");
-
-// MUST substitute query parameters BEFORE opening the connection
-url = ApproovService.substituteQueryParams(url);
-
-// Now open the connection using the modified URL
-HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-
-// Then apply standard Approov token injection and header substitutions
-connection = ApproovService.addApproov(connection);
-```
-
-> **Note**: The service layer inserts secure strings into the URL exactly as they are returned by the Approov cloud. It does **not** automatically apply URL encoding. If your secure strings contain reserved characters (like `&`, `=`, `#`, or spaces), you must ensure they are properly URL-encoded when adding them via the Approov CLI to avoid mangling the query parameters.
 
 ## Token Binding
 

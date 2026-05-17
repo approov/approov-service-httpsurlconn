@@ -4,7 +4,6 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
-
 ## [3.5.4] - 2026-05-15
 
 ### Added
@@ -19,6 +18,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Changed
 - `ApproovService` now routes decision logic through the service mutator and exposes set/get APIs (`setServiceMutator` / `getServiceMutator`).
 - `ApproovService.addApproov(connection)` now returns the configured `HttpsURLConnection` object instead of `void`.
+- Updated documentation in `USAGE.md` and `REFERENCE.md` to demonstrate how to perform manual query parameter substitution using `fetchSecureString`.
+
+### Removed
+- Automated query parameter substitution (`substituteQueryParams` and related methods) has been removed to resolve mutation metadata tracking limitations caused by Java `URL` immutability (Issue #14).
 
 ### Deprecated
 - `setProceedOnNetworkFail()` and `getProceedOnNetworkFail()` in favor of `ApproovServiceMutator` policies.
