@@ -1115,7 +1115,7 @@ public class ApproovServiceMiniSdkTest {
         
         // Repeated same-config with options:
         try {
-            ApproovService.initialize(null, validInitialConfig, "options:bad-option");
+            ApproovService.initialize(context, validInitialConfig, "options:bad-option");
             fail("Expected IllegalStateException from SDK for bad options");
         } catch (IllegalStateException e) {
             assertTrue(e.getMessage().contains("options initialization failed"));
@@ -1141,6 +1141,11 @@ public class ApproovServiceMiniSdkTest {
     public void testStrictBodyDigestOmission() throws Exception {
         reinitializeService(scenarioJson(uniqueCaseName("strict-digest"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
+            
+        ApproovDefaultMessageSigning.SignatureParametersFactory factory = ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory()
+            .setUseInstallMessageSigning();
+        factory.setBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA256, true);
+        ApproovService.setServiceMutator(new ApproovDefaultMessageSigning().setDefaultFactory(factory));
         
         HttpsURLConnection connection = (HttpsURLConnection) new URL(getTargetURL()).openConnection();
         connection.setRequestMethod("POST");
@@ -1148,7 +1153,7 @@ public class ApproovServiceMiniSdkTest {
             ApproovService.addApproov(connection); // missing bodyBytes
             fail("Expected ApproovException for missing bodyBytes in POST");
         } catch (io.approov.service.httpsurlconn.ApproovException e) {
-            assertTrue(e.getMessage().contains("body bytes"));
+            assertTrue(e.getMessage().contains("body digest"));
         }
     }
 
