@@ -1180,7 +1180,7 @@ public class ApproovServiceMiniSdkTest {
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
         
         ApproovService.setApproovHeader("X-Custom-Token", "Bearer ");
-        ApproovService.setApproovTraceHeader("X-Custom-Trace");
+        ApproovService.setApproovTraceIDHeader("X-Custom-Trace");
         
         HttpsURLConnection connection = (HttpsURLConnection) new URL(getTargetURL()).openConnection();
         ApproovService.addApproov(connection);
@@ -1193,7 +1193,7 @@ public class ApproovServiceMiniSdkTest {
         
         // Restore defaults
         ApproovService.setApproovHeader("Approov-Token", "");
-        ApproovService.setApproovTraceHeader("Approov-TraceID");
+        ApproovService.setApproovTraceIDHeader("Approov-TraceID");
     }
 
 }
