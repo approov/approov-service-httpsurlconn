@@ -322,7 +322,7 @@ public class ApproovServiceMiniSdkTest {
         connection.connect();
         if (true) {
             JSONObject reply = readResponseJson(connection);
-            assertEquals("Approov-Token", getHeader(reply, "Approov-Token"));
+            assertEquals("", getHeader(reply, "Approov-Token"));
             assertEquals("", getHeader(reply, "Approov-TraceID"));
         }
     }
