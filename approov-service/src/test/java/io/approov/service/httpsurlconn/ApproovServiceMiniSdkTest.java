@@ -91,7 +91,7 @@ public class ApproovServiceMiniSdkTest {
      * §1 Empty Configuration (Valid Comment) / Empty Configuration (Empty Comment)
      *
      * Initializing with an empty config should keep the service layer initialized
-     * while making the returned client behave like a plain OkHttp client with no
+     * while making the returned connection behave like a plain HttpsURLConnection with no
      * Approov mutations.
      */
     @Test
@@ -184,7 +184,7 @@ public class ApproovServiceMiniSdkTest {
      *
      * A protected request is processed and modified by the service layer.
      * The token's `pay` claim should contain the SHA256 hash of the binding header value.
-     * Also tests header and query parameter substitution.
+     * Also tests header substitution and manual query secure string construction.
      */
     @Test
     public void testUpdateRequestAddsTokenTraceBindingHashAndSubstitutions() throws Exception {
@@ -203,11 +203,12 @@ public class ApproovServiceMiniSdkTest {
         ApproovService.addSubstitutionHeader("Api-Key", null);
         ApproovService.addSubstitutionHeader("X-Multi-1", "pref-");
         ApproovService.addSubstitutionHeader("X-Multi-2", null);
-        ApproovService.addSubstitutionQueryParam("api_key");
-        ApproovService.addSubstitutionQueryParam("p2");
 
-        URL url = new URL(getTargetURL() + "?api_key=query-key&p2=multiple-2");
-        url = ApproovService.substituteQueryParams(url);
+        String querySecret = ApproovService.fetchSecureString("query-key", null);
+        String p2Secret = ApproovService.fetchSecureString("multiple-2", null);
+        URL url = new URL(getTargetURL() + "?api_key=" +
+            java.net.URLEncoder.encode(querySecret, "UTF-8") +
+            "&p2=" + java.net.URLEncoder.encode(p2Secret, "UTF-8"));
         HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
         connection.setRequestProperty("Authorization", "Bearer oauth-token");
         connection.setRequestProperty("Api-Key", "header-key");
@@ -304,7 +305,7 @@ public class ApproovServiceMiniSdkTest {
      * §2 Missing Artifacts Fallback
      *
      * When the Approov service is unavailable (NO_APPROOV_SERVICE), the request
-     * should proceed without an Approov token or trace ID.
+     * should proceed with empty Approov token and trace ID headers.
      */
     @Test
     public void testUpdateRequestNoApproovServiceProceedsWithEmptyHeaders() throws Exception {
@@ -754,10 +755,10 @@ public class ApproovServiceMiniSdkTest {
      * §5 Digest Body Application
      *
      * The digest body (Content-Digest) for an install message signature is present
-     * for POST, PUT, and PATCH requests when body digest is configured.
+     * for POST and PUT requests when body digest is configured.
      */
     @Test
-    public void testDigestBodyAppendedForPOSTPUTPATCHRequests() throws Exception {
+    public void testDigestBodyAppendedForPOSTPUTRequests() throws Exception {
         reinitializeServiceWithTargetHost("");
         
         ApproovDefaultMessageSigning.SignatureParametersFactory factory = ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory()

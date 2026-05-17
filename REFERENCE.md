@@ -12,7 +12,7 @@ If a method throws an `ApproovNetworkException` (a subclass of `ApproovException
 If a method throws an `ApproovRejectionException` (a subclass of `ApproovException`) the this indicates the problem was that the app failed attestation. An additional method `getARC()` provides the [Attestation Response Code](https://approov.io/docs/latest/approov-usage-documentation/#attestation-response-code), which could be provided to the user for communication with your app support to determine the reason for failure, without this being revealed to the end user. The method `getRejectionReasons()` provides the [Rejection Reasons](https://approov.io/docs/latest/approov-usage-documentation/#rejection-reasons) if the feature is enabled, providing a comma separated list of reasons why the app attestation was rejected.
 
 ## Initialize
-Initializes the Approov SDK and thus enables the Approov features. The `config` will have been provided in the initial onboarding or email or can be [obtained](https://approov.io/docs/latest/approov-usage-documentation/#getting-the-initial-sdk-configuration) using the Approov CLI. This will generate an error if a second attempt is made at initialization with a different `config`.
+Initializes the service layer and, when `config` is non-empty, initializes the Approov SDK and enables Approov features. The `config` will have been provided in the initial onboarding or email or can be [obtained](https://approov.io/docs/latest/approov-usage-documentation/#getting-the-initial-sdk-configuration) using the Approov CLI. This will generate an error if a second attempt is made at initialization with a different `config`.
 
 ```Java
 void initialize(Context context, String config)
@@ -26,7 +26,7 @@ An overload is also provided to include a `comment`:
 void initialize(Context context, String config, String comment)
 ```
 
-It is possible to pass an empty `config` string to indicate that no initialization is required. Only do this if you are also using a different Approov quickstart in your app (which will use the same underlying Approov SDK) and this will have been initialized first.
+It is possible to pass an empty `config` string to put the service layer into initialized-but-disabled bypass mode. In this mode `addApproov` returns the supplied connection without token injection, trace headers, message signing, secure string substitution, or dynamic pinning. A later call with a valid non-empty config may enable Approov protection.
 
 ## IsInitialized
 Checks if the Approov SDK has been successfully initialized.
@@ -43,7 +43,7 @@ boolean isApproovEnabled()
 ```
 
 ## AddApproov
-Adds Approov to the given `connection`. The Approov token is added in a header and this also overrides the HostnameVerifier with something that pins the connections. If a binding header has been specified then its hash will be set if it is present. This function may also substitute header values to hold secure string secrets. If it is not possible to fetch an Approov token due to networking issues, or header substitution fails due to attestation rejection, then `ApproovException` is thrown. Returns the configured connection.
+Adds Approov to the given `connection`. The Approov token is added in a header and this also wraps the current `HostnameVerifier` with one that pins the connection. If a binding header has been specified then its hash will be set if it is present, or cleared if it is absent. This function may also substitute header values to hold secure string secrets. If it is not possible to fetch an Approov token due to networking issues, or header substitution fails due to attestation rejection, then `ApproovException` is thrown. Returns the configured connection.
     
 ```Java
 HttpsURLConnection addApproov(HttpsURLConnection request) throws ApproovException
@@ -91,7 +91,7 @@ String getLastARC()
 ```
 
 ## SetProceedOnNetworkFail
-*(Deprecated)* If the provided `proceed` value is `true` then this indicates that the networking should proceed anyway if it is not possible to obtain an Approov token due to a networking failure. If this is called then the backend API can receive calls without the expected Approov token header being added, or without header/query parameter substitutions being made. This should only ever be used if there is some particular reason, perhaps due to local network conditions, that you believe that traffic to the Approov cloud service will be particularly problematic.
+*(Deprecated)* This method is retained for source compatibility but has no effect. Use `setServiceMutator` to customize whether networking should proceed when it is not possible to obtain an Approov token.
 
 ```Java
 void setProceedOnNetworkFail(boolean proceed)
@@ -222,10 +222,10 @@ String fetchToken(String url) throws ApproovException
 This throws `ApproovException` if there was a problem obtaining an Approov token. This may require network access so may take some time to complete, and should not be called from the UI thread.
 
 ## GetMessageSignature
-*(Deprecated)* Gets the [message signature](https://approov.io/docs/latest/approov-usage-documentation/#message-signing) for the given `message`. This has been superseded by `getAccountMessageSignature` and `getInstallMessageSignature`.
+*(Deprecated)* This obsolete method has been superseded by `getAccountMessageSignature` and `getInstallMessageSignature`, and currently returns `null`.
 
 ```Java
-String getMessageSignature(String message) throws ApproovException
+String getMessageSignature(String message)
 ```
 
 ## GetAccountMessageSignature
@@ -243,7 +243,7 @@ String getInstallMessageSignature(String message) throws ApproovException
 ```
 
 ## FetchSecureString
-Fetches a [secure string](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) with the given `key` if `newDef` is `null`. Returns `null` if the `key` secure string is not defined. If `newDef` is not `null` then a secure string for the particular app instance may be defined. In this case the new value is returned as the secure string. Use of an empty string for `newDef` removes the string entry. Note that the returned string should NEVER be cached by your app, you should call this function when it is needed.
+Fetches a [secure string](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) with the given `key` if `newDef` is `null`. Returns `null` if the `key` secure string is not defined. If `newDef` is not `null` then a secure string for the particular app instance may be defined. In this case the new value is returned as the secure string. Use of an empty string for `newDef` removes the string entry. Note that the returned string should NEVER be cached by your app, you should call this function when it is needed. If the returned value is used as a query parameter value, URL-encode it before constructing the URL unless the secure string was already stored URL-encoded.
 
 ```Java
 String fetchSecureString(String key, String newDef) throws ApproovException

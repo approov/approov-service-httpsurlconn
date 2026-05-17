@@ -33,7 +33,8 @@ By default, the `ApproovService` processes requests based on the attestation sta
 | **Success** | Proceed | The request acts as expected and is sent with the `Approov-Token`. |
 | **No Network / Poor Network / MITM Detected** | Throw Exception | An `ApproovNetworkException` is thrown. The request should be retried. |
 | **Rejection** | Throw Exception | An `ApproovRejectionException` is thrown. The request is marked as rejected. |
-| **No Approov Service / Unknown URL** | Proceed | The request is sent **without** an `Approov-Token`. |
+| **No Approov Service** | Proceed | The request is sent with empty Approov token and trace headers to show that Approov processing occurred. |
+| **Unknown URL / Unprotected URL** | Proceed | The request is sent without Approov token, trace, secure string substitution, or message signing. |
 
 ## Customizing Request Handling with Mutators
 
@@ -41,7 +42,7 @@ You may want to modify this behavior to suit specific app requirements. A common
 
 ### Prevent Access Without a Token (e.g. NO_APPROOV_SERVICE)
 
-The standard behavior for statuses like `NO_APPROOV_SERVICE` is to proceed with the request without adding an Approov token. This might occur, for example, if a device cannot connect to the Approov cloud due to a restricted network environment. You may wish to prevent this behavior to ensure that *only* requests with valid proof of attestation reach your backend API, allowing you to explicitly handle this case within your application.
+The standard behavior for `NO_APPROOV_SERVICE` is to proceed with empty Approov token and trace headers. This proves that Approov processing was attempted, but that no real Approov token was available. You may wish to prevent this behavior to ensure that *only* requests with valid proof of attestation reach your backend API, allowing you to explicitly handle this case within your application.
 
 You can use a mutator to enforce this policy by throwing an error or returning `false` for such statuses.
 
@@ -161,7 +162,7 @@ It is possible to sign HTTP requests using Approov to ensure message integrity a
 
 Message signing is not enabled unless you opt in. By default, the `ApproovService` uses the interface `ApproovServiceMutator` default, which does no message signing. Even if you install `ApproovDefaultMessageSigning`, a signature is only added when:
 
-- The request already has an `Approov-Token` header (i.e., Approov processing ran).
+- The request has a real, non-empty Approov JWT token. Empty token headers and status fallback headers are not signed.
 - A `SignatureParametersFactory` is configured (default or host-specific).
 
 ### Enable with default settings
@@ -269,9 +270,11 @@ try {
         throw new Exception("Secure string is null");
     }
 
-    // 2. Construct your URL manually
+    // 2. Construct your URL manually. Encode the value unless it was already
+    // stored URL-encoded in Approov.
     String baseUrl = "https://api.yourdomain.com/endpoint";
-    URL url = new URL(baseUrl + "?api_key=" + secureApiKey);
+    URL url = new URL(baseUrl + "?api_key=" +
+        java.net.URLEncoder.encode(secureApiKey, "UTF-8"));
 
     // 3. Open connection and add Approov
     HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();

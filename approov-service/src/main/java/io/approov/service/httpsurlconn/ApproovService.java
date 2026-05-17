@@ -993,5 +993,6 @@ final class PinningHostnameVerifier implements HostnameVerifier {
             Log.e(TAG, "Pinning exception for " + hostname + ": " + e.toString());
             return false;
         }
+        return false;
     }
 }

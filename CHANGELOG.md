@@ -9,7 +9,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Added
 - `ApproovService.addApproov(HttpsURLConnection, byte[])` overload to support message signing body digests (`Content-Digest`) for repeatable payloads.
 - `ApproovServiceMutator` protocol with default behavior to centralize decision points in the service flow.
-- Mutator hooks for precheck, token fetch, secure string fetch, custom JWT fetch, header/query substitutions, and pinning.
+- Mutator hooks for precheck, token fetch, secure string fetch, custom JWT fetch, header substitutions, and pinning.
 - Configurable HTTP message signing via `ApproovDefaultMessageSigning` and `SignatureParametersFactory` supporting both Install and Account message signatures.
 - Added `setUseApproovStatusIfNoToken` to allow using status as the token value when the token is missing.
 - Added `getAccountMessageSignature` and `getInstallMessageSignature` to the public API.
