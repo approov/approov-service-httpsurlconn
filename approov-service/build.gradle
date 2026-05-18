@@ -47,6 +47,13 @@ configurations {
     }
 }
 
+tasks.register('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    archiveClassifier.set('shadow')
+    configurations = [project.configurations.shadowed]
+    relocate 'org.bouncycastle', 'io.approov.internal.bouncycastle'
+    exclude 'META-INF/**'
+}
+
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'io.approov:approov-android-sdk:3.5.3'
@@ -68,12 +75,6 @@ dependencies {
     testImplementation 'androidx.test:core:1.6.1'
 }
 
-tasks.register('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
-    archiveClassifier.set('shadow')
-    configurations = [project.configurations.shadowed]
-    relocate 'org.bouncycastle', 'io.approov.internal.bouncycastle'
-    exclude 'META-INF/**'
-}
 
 tasks.withType(JavaCompile) {
     dependsOn tasks.named('shadowJar')
