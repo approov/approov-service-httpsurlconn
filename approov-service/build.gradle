@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.library'
     id 'maven-publish'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 repositories {
@@ -39,6 +40,8 @@ android {
 }
 
 configurations {
+    shadowed
+
     testImplementation {
         exclude group: 'io.approov', module: 'approov-android-sdk'
     }
@@ -48,8 +51,10 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'io.approov:approov-android-sdk:3.5.3'
 
-    // Bouncycastle for ASN.1 parsing
-    implementation 'org.bouncycastle:bcprov-jdk15to18:1.84'
+    // Bouncycastle for ASN.1 parsing (shaded)
+    shadowed 'org.bouncycastle:bcprov-jdk15to18:1.84'
+    compileOnly files(tasks.shadowJar)
+    implementation files(tasks.shadowJar)
 
     testImplementation 'junit:junit:4.13.2'
     if (findProject(':approov-sdk') != null) {
@@ -61,4 +66,15 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.11.1'
     testImplementation 'org.json:json:20231013'
     testImplementation 'androidx.test:core:1.6.1'
+}
+
+shadowJar {
+    archiveClassifier.set('shadow')
+    configurations = [project.configurations.shadowed]
+    relocate 'org.bouncycastle', 'io.approov.internal.bouncycastle'
+    exclude 'META-INF/**'
+}
+
+tasks.withType(JavaCompile) {
+    dependsOn tasks.shadowJar
 }
