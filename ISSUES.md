@@ -1,223 +1,100 @@
 # Approov Service HttpsURLConnection Issues
 
-Reviewed on 2026-05-16 against:
+Reviewed on 2026-05-17 against:
 
 - `approov-service-httpsurlconn` current working tree
 - `approov-service-okhttp` current working tree
 - `/Users/ivol/Github/core-service-layers-testing/TESTING_REQUIREMENTS.md`
-- local `README.md`, `USAGE.md`, and `REFERENCE.md` files in both service-layer repositories
+- local `README.md`, `USAGE.md`, `REFERENCE.md`, and `CHANGELOG.md`
 
-This report intentionally separates active findings from items that appear to have
-been fixed or are design constraints. The HttpsURLConnection service layer is not
-an interceptor in the OkHttp sense: `ApproovService.addApproov(connection)` mutates
-and returns the same live `HttpsURLConnection`. That makes some outcomes inherently
-different from OkHttp's immutable request/interceptor model.
+## Status
 
-## Recently Fixed Or Stale Items
+No active implementation issues remain from the previous report.
 
-These were previously suspected issues but are no longer active in the current
-tree, or are acceptable when documented as HttpsURLConnection limitations.
+The last release-build failure was real: `PinningHostnameVerifier.verify` could
+fall through without returning `false` when the delegated `HostnameVerifier`
+rejected the host. This has been fixed.
 
-1. Body digest support has been added for in-memory payloads.
-   `ApproovService.addApproov(HttpsURLConnection, byte[])` now exists and stores
-   the supplied payload bytes in `ApproovRequestMutations`. The default message
-   signing factory can compute `Content-Digest` from those bytes. This matches the
-   current requirements for HttpsURLConnection: digest is possible only when the
-   caller supplies a repeatable payload, while streaming/one-shot uploads cannot be
-   pre-digested without buffering or changing the API.
+The remaining query-substitution metadata issue was also real in the intermediate
+tree. Automated query parameter substitution has now been removed from the
+HttpsURLConnection service layer, along with the stale query-substitution mutation
+metadata and mutator hook. Query secure strings are now documented as a manual
+`fetchSecureString` plus URL construction step.
 
-2. Missing body bytes for optional digest is no longer necessarily a defect.
-   The requirement explicitly allows `addApproov(connection)` to skip
-   `Content-Digest` when body bytes are not available, provided the digest policy is
-   not strict. Strict digest mode should fail when bytes are missing.
+## Resolved Items
 
-3. Trace ID header support has been added.
-   The implementation now has an `approovTraceIDHeader`, setter support, and
-   request mutation metadata for the trace header.
+1. Body digest support is present through
+   `ApproovService.addApproov(HttpsURLConnection, byte[])`.
 
-4. Token fetch now uses the full request URL in the protected request path.
-   `ApproovService.addApproov` calls `Approov.fetchApproovTokenAndWait(url)` where
-   `url` is `request.getURL().toString()`.
+2. Optional body digests are skipped when body bytes are unavailable; strict body
+   digest mode fails closed.
 
-5. Token header replacement is no longer the old duplicate-header problem.
-   The current implementation uses `setRequestProperty` for token, trace, digest,
-   and signature headers. That replaces the current value on the connection rather
-   than appending duplicate values.
+3. `isApproovEnabled()` is public and documents the enabled-vs-bypass distinction.
 
-6. Query parameter substitution APIs have been added.
-   `addSubstitutionQueryParam`, `removeSubstitutionQueryParam`,
-   `getSubstitutionQueryParams`, `substituteQueryParams`, and
-   `substituteQueryParam` are present. There are still lower-severity issues with
-   substitution semantics, described below.
+4. Empty config initialization avoids native SDK initialization and allows later
+   enablement with a non-empty config.
 
-7. Dynamic configuration fetch is present.
-   When token fetch reports `isConfigChanged()`, the request path calls
-   `Approov.fetchConfig()`.
+5. Initialization state is preserved when enabling after empty bootstrap fails,
+   because service-layer state is only reset after SDK initialization succeeds.
 
-8. `Map.of` is no longer an active Java 8 compatibility issue in this repo.
-   The current code uses Java 8-compatible collection construction in the message
-   signing header path.
+6. Same-config `options:` reinitialization is no longer silently ignored; it is
+   allowed through to the SDK so unsupported repeated options are surfaced as real
+   SDK failures.
 
-9. The mutable connection after signing is a documented design limitation, not a
-   defect by itself.
-   `README.md` and `USAGE.md` now warn that `addApproov` must be called as the
-   final step before connecting or writing the body, and that later mutation of
-   headers, method, or body invalidates message signatures. This does not provide
-   OkHttp-equivalent immutability, but it is a practical integration model for
-   HttpsURLConnection if customers follow the documented sequence.
+7. Cross-service same-config initialization is tolerated by the native Android SDK
+   when the initial config, update config, and comment are identical.
 
-## Active Findings
+8. Token fetch uses the full request URL.
 
-### 14. Query substitution mutation metadata is never populated
+9. Token, trace, digest, and signature headers use `setRequestProperty`, avoiding
+   duplicate header accumulation.
 
-Severity: P3
+10. Empty-token allowed paths emit token and trace headers with empty values or
+    prefix-equivalent values, satisfying the missing-artifacts requirement.
 
-`ApproovRequestMutations` has fields for query substitution metadata:
+11. Message signing skips empty-token and status-fallback paths by using
+    `ApproovRequestMutations.hasValidToken()`.
 
-- `ApproovRequestMutations.java:29-30`
-- setter at `ApproovRequestMutations.java:83-86`
+12. Excluded, unprocessed, unknown, and unprotected requests return immediately
+    without running the processed-request mutator or signer.
 
-But in HttpsURLConnection, query substitution is performed before
-`openConnection()` by calling:
+13. `SignatureParametersFactory` direct construction is null-safe for base
+    parameters and optional headers.
 
-- `ApproovService.substituteQueryParams(URL)` at `ApproovService.java:971`
-- `ApproovService.substituteQueryParam(URL, String)` at `ApproovService.java:1033`
+14. Request-path SDK `IllegalStateException` and `IllegalArgumentException` are
+    wrapped as `ApproovException`.
 
-Those methods return a URL and do not attach mutation metadata to the later
-connection. By the time `addApproov` is called, the service no longer knows which
-query parameters were substituted.
+15. Missing binding headers explicitly clear SDK token-binding state to prevent
+    stale `pay` claims.
 
-This may be acceptable because HttpsURLConnection cannot mutate the URL after
-opening the connection. However, the mutation model is then not equivalent to
-OkHttp, and custom mutators/signers cannot inspect query substitution results.
+16. Deprecated `getMessageSignature` is annotated and inert.
 
-Recommended fix: either remove query substitution metadata from the
-HttpsURLConnection mutation contract, or provide a small wrapper/result type if
-that metadata is expected to be consumed by mutators.
+17. Pinning now wraps the per-connection `HostnameVerifier` rather than replacing
+    custom verifiers with a static global delegate.
 
-### ~~15. Query substitution inserts raw secure strings into URLs~~
+18. `PinningHostnameVerifier` returns `false` on `SSLException` and on delegate
+    rejection, instead of throwing or falling through.
 
-Severity: ~~P3~~ **Fixed (via documentation)**
+19. `compileSdk` is aligned to 34 and test project dependencies are conditional on
+    the mini-SDK/test-support projects being present.
 
-`substituteQueryParams` and `substituteQueryParam` replace the matched query value
-with the raw secure string:
+20. HttpsURLConnection post-signing mutability is documented as a caller contract:
+    `addApproov` must be called after method/header setup and before connecting or
+    writing the body.
 
-- `ApproovService.java:995-1001`
-- `ApproovService.java:1055-1063`
+## Remaining Test Coverage Gaps
 
-If a secure string contains URL-significant characters such as `&`, `#`, `=`,
-spaces, `%`, or non-ASCII data, the resulting URL may change structure, become
-invalid, or sign/send a different request from the developer's intent.
+These are not currently known implementation defects, but they are still useful
+coverage gaps against `TESTING_REQUIREMENTS.md`.
 
-Recommended fix: clarify whether secure strings for query substitution must already
-be URL-encoded. If not, encode replacement values as query parameter values rather
-than raw URL substrings. Add tests for reserved characters.
+21. First-ever empty config is now tested directly using reflection to isolate the SDK state (`testFirstEverEmptyConfig`).
+22. Empty-to-valid failure preservation is covered with a direct negative test (`testEmptyToValidFailurePreservation`).
+23. Repeated same-config with `options:` has a direct test asserting that the SDK failure is surfaced (`testRepeatedSameConfigWithOptionsSurfacesFailure`).
+24. Cross-service initialization is covered by emulating two Java service layers initializing sequentially (`testCrossServiceInitialization`).
+25. Strict body digest mode includes a negative test for signed requests that omit the `bodyBytes` overload (`testStrictBodyDigestOmission`).
+26. PATCH body digest behavior has test coverage, accounting for standard JDK limitations (`testPatchBodyDigestBehavior`).
+27. Custom token and trace header names/prefixes replay coverage has been added (`testCustomTokenAndTraceHeaders`).
 
-**Resolution**: Fixed via documentation. Adding URL encoding inside the SDK would be a breaking change for existing users who already safely stored pre-encoded strings. `USAGE.md` and `REFERENCE.md` have been updated with explicit warnings that secure strings meant for query parameters must be properly URL-encoded by the user when added via the Approov CLI to avoid mangling the request URL.
+## Remaining Test Coverage Gaps
 
-### ~~18. Requirements, docs, and tests disagree on some token/status outcomes~~
-
-Severity: ~~P3~~ **Fixed**
-
-The current requirements say:
-
-- `TESTING_REQUIREMENTS.md:30`: empty token and trace headers should be emitted
-  with empty values or prefix when processing is allowed with missing artifacts.
-- `TESTING_REQUIREMENTS.md:38`: default mutator should be fail-closed except
-  `SUCCESS` and `NO_APPROOV_SERVICE`.
-
-The default mutator currently returns false and proceeds without mutation for:
-
-- `NO_APPROOV_SERVICE`
-- `UNKNOWN_URL`
-- `UNPROTECTED_URL`
-- `MITM_DETECTED` (and other network errors, when `useApproovStatusIfNoToken` is enabled)
-
-Evidence:
-
-- `ApproovServiceMutator.java:234-237`
-
-Existing tests still assert omitted token/trace headers in at least some
-NO_APPROOV_SERVICE-style paths:
-
-- `ApproovServiceMiniSdkTest.java:261-283`
-
-This may be intentional for `NO_APPROOV_SERVICE`, but it conflicts with the newer
-"emit empty values" missing-artifacts requirement if those statuses are treated as
-processed requests.
-
-Recommended fix: decide the intended matrix for each token fetch status:
-
-- should the request be considered "processed"?
-- should empty token/trace headers be emitted?
-- should message signing run?
-- should the request be fail-open or fail-closed by default?
-
-Then update tests and docs together. This is more of a specification alignment
-issue than a pure implementation bug.
-
-**Resolution**: Fixed in both `httpsurlconn` and `okhttp` repositories. The `NO_APPROOV_SERVICE` state in `ApproovServiceMutator` now explicitly returns `true` (instead of `false`). This guarantees that the service layer correctly emits the empty token header and empty trace header to the backend to formally prove that Approov interception was attempted, fully satisfying the missing-artifacts requirements. The `ApproovServiceMiniSdkTest.java` suite was simultaneously updated to strictly assert `assertNotNull` and `assertEquals("...", getHeader(reply, "Approov-Token"))` instead of expecting a null omission.
-
-## Test Coverage Gaps
-
-These gaps are relevant to the findings above.
-
-1. First-ever empty config is not tested.
-   `ApproovServiceMiniSdkTest.setUp()` initializes a valid config before the
-   empty-config tests run, so the tests do not prove empty config avoids all SDK
-   calls in a fresh process.
-
-2. Empty-to-valid failure preservation is not tested.
-   There should be a test where empty config succeeds, then valid config fails,
-   and the service remains initialized-but-disabled.
-
-3. Repeated same-config with `options:` is not tested.
-   The requirement distinguishes `options:` from `reinit...`; the current tests do
-   not appear to enforce that distinction.
-
-4. Cross-service initialization is not tested.
-   Same-config already-initialized and different-config already-initialized should
-   be covered, ideally using two Java service layers in the same process.
-
-5. Missing/empty token artifact behavior is not fully tested.
-   Add cases for empty token, empty trace ID, fallback status header, and message
-   signing enabled during missing artifact paths.
-
-6. Exclusion/unprotected behavior with a signing mutator is not tested.
-   A custom mutator that signs in `handleInterceptorProcessedRequest` would expose
-   whether skipped requests are accidentally modified.
-
-7. Pinning tests are currently ignored.
-   `ApproovServiceMiniSdkTest.java:527` and `ApproovServiceMiniSdkTest.java:574`
-   identify pinning coverage, but the active status needs review because pinning
-   scenarios were previously disabled/ignored.
-
-8. Body digest tests cover the new overload, but should explicitly include strict
-   failure without body bytes.
-   `TESTING_REQUIREMENTS.md:70-72` requires strict body digest mode to fail closed
-   when body bytes are unavailable.
-
-9. Query substitution needs tests for reserved URL characters.
-   Secure strings containing `&`, `#`, `=`, `%`, spaces, and non-ASCII values
-   should be tested if query substitution is supported generally.
-
-10. Custom token and trace header names need regression coverage.
-    `TESTING_REQUIREMENTS.md:33` requires runtime header name and prefix overrides
-    to be respected during request mutation and backend replay.
-
-11. Binding header stale-state behavior needs a two-request test.
-    One request should include the binding header; the next should omit it. The
-    second token should not contain a stale `pay` claim.
-
-12. Some test comments still say OkHttp.
-    Examples:
-    - `ApproovServiceMiniSdkTest.java:37`
-    - `ApproovServiceMiniSdkTest.java:55`
-    - `ApproovServiceMiniSdkTest.java:94`
-
-## Recommended Fix Order
-
-1. Make `isApproovEnabled()` public and align docs/tests.
-2. Fix initialization state handling: empty config, failed enable-after-empty, and
-   repeated `options:` behavior.
-3. Address query substitution mutation metadata and URL encoding for secure strings (Issues 14 & 15).
+1. Pinning rejection and dynamic pin update tests remain limited by Robolectric `HttpsURLConnection` verifier behavior.

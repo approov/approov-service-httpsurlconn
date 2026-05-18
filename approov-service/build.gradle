@@ -53,8 +53,8 @@ dependencies {
 
     // Bouncycastle for ASN.1 parsing (shaded)
     shadowed 'org.bouncycastle:bcprov-jdk15to18:1.84'
-    compileOnly files(tasks.shadowJar)
-    implementation files(tasks.shadowJar)
+    compileOnly files(tasks.named('shadowJar'))
+    implementation files(tasks.named('shadowJar'))
 
     testImplementation 'junit:junit:4.13.2'
     if (findProject(':approov-sdk') != null) {
@@ -68,7 +68,7 @@ dependencies {
     testImplementation 'androidx.test:core:1.6.1'
 }
 
-shadowJar {
+tasks.register('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
     archiveClassifier.set('shadow')
     configurations = [project.configurations.shadowed]
     relocate 'org.bouncycastle', 'io.approov.internal.bouncycastle'
@@ -76,5 +76,5 @@ shadowJar {
 }
 
 tasks.withType(JavaCompile) {
-    dependsOn tasks.shadowJar
+    dependsOn tasks.named('shadowJar')
 }
