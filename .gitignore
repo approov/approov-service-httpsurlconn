@@ -42,6 +42,12 @@ captures/
 # OSX filesystem
 .DS_Store
 
+# Generated documentation artifacts
+approov-service/docs/*.jar
+
+# Local tool state
+.wrangler/
+
 # Pods
 Podfile.lock
 Pods/
