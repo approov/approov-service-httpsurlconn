@@ -4,7 +4,7 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
-## [Unreleased]
+## [3.5.4] - 2026-05-21
 
 ### Added
 - `ApproovServiceMutator` support to centralize decision points in the `HttpsURLConnection` service flow.
