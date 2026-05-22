@@ -1,17 +1,87 @@
 # Approov Service for HttpsURLConnection
 
-A wrapper for the [Approov SDK](https://github.com/approov/approov-android-sdk) to enable easy integration when using [`HttpsURLConnection`](https://developer.android.com/reference/javax/net/ssl/HttpsURLConnection) for making the API calls that you wish to protect with Approov. In order to use this you will need a trial or paid [Approov](https://www.approov.io) account.
+This package is an open-source wrapper layer that allows you to easily use Approov with `HttpsURLConnection` in native Android apps written in Java.
 
-Please see the [Quickstart](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/README.md) for example integration.
+This page provides the steps for integrating Approov into your app. Additionally, a step-by-step tutorial guide using our [Shapes App Example](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SHAPES-EXAMPLE.md) is also available.
 
-# Changelog
+To follow this guide you should have received an onboarding email for a trial or paid Approov account.
 
-Please see the [CHANGELOG.md](CHANGELOG.md) for more information on the changes in each version.
+## ADDING APPROOV SERVICE DEPENDENCY
+The Approov integration is available via [`maven`](https://mvnrepository.com/repos/central). This allows inclusion into the project by simply specifying a dependency in the `gradle` files for the app.
+The `Maven` repository is already present in the gradle.build file so the only import you need to make is the actual service layer itself:
 
-# Reference
+```gradle
+implementation("io.approov:service.httpsurlconn:3.5.3")
+```
 
-Please see the [REFERENCE.md](REFERENCE.md) for more information on the Approov Service for HttpsURLConnection.
+Make sure you do a Gradle sync (by selecting `Sync Now` in the banner at the top of the modified `.gradle` file) after making these changes.
 
-# Usage
+This package has a further dependency on the closed-source [Approov SDK](https://central.sonatype.com/artifact/io.approov/approov-android-sdk).
 
-Please see the [USAGE.md](USAGE.md) for more information on how to use this wrapper.
+## MANIFEST CHANGES
+The following app permissions need to be available in the manifest to use Approov:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+Note that the minimum SDK version you can use with the Approov package is 21 (Android 5.0). 
+
+Please [read this](https://approov.io/docs/latest/approov-usage-documentation/#targeting-android-11-and-above) section of the reference documentation if targeting Android 11 (API level 30) or above.
+
+## INITIALIZING APPROOV SERVICE
+In order to use the `ApproovService` you must initialize it when your app is created, usually in the `onCreate` method:
+
+```Java
+import io.approov.service.httpsurlconn.ApproovService;
+
+public class YourApp extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        ApproovService.initialize(getApplicationContext(), "<enter-your-config-string-here>");
+    }
+}
+```
+
+The `<enter-your-config-string-here>` is a custom string that configures your Approov account access. This will have been provided in your Approov onboarding email.
+
+## USING APPROOV SERVICE
+You can then make Approov enabled `HttpsURLConnection` API calls using the following call on any `HttpsURLConnection` connection, just before the connection is made:
+
+```Java
+ApproovService.addApproov(connection);
+```
+
+> **NOTE:** It is important that this call is made just prior to the connection being made and thus within any retry loop, to ensure that an updated Approov token is always made available on the connection request.
+
+For API domains that are configured to be protected with an Approov token, this adds the `Approov-Token` header and pins the connection. This may also substitute header values when using secrets protection.
+
+Approov errors will generate an `ApproovException`, which is a type of `IOException`.
+
+## CHECKING IT WORKS
+Initially you won't have set which API domains to protect, so any `addApproov` call will not add anything. It will have called Approov though and made contact with the Approov cloud service. You will see logging from Approov saying `UNKNOWN_URL`.
+
+Your Approov onboarding email should contain a link allowing you to access [Live Metrics Graphs](https://approov.io/docs/latest/approov-usage-documentation/#metrics-graphs). After you've run your app with Approov integration you should be able to see the results in the live metrics within a minute or so. At this stage you could even release your app to get details of your app population and the attributes of the devices they are running upon.
+
+## NEXT STEPS
+To actually protect your APIs and/or secrets there are some further steps. Approov provides two different options for protection:
+
+* [API PROTECTION](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/API-PROTECTION.md): You should use this if you control the backend API(s) being protected and are able to modify them to ensure that a valid Approov token is being passed by the app. An [Approov Token](https://approov.io/docs/latest/approov-usage-documentation/#approov-tokens) is a short-lived cryptographically signed JWT proving the authenticity of the call.
+
+* [SECRETS PROTECTION](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SECRETS-PROTECTION.md): This allows app secrets, including API keys for 3rd party services, to be protected so that they no longer need to be included in the released app code. These secrets are only made available to valid apps at runtime.
+
+Note that it is possible to use both approaches side-by-side in the same app.
+
+---
+
+## Useful Links
+
+- [Approov SDK](https://github.com/approov/approov-android-sdk)
+- [HttpsURLConnection Documentation](https://developer.android.com/reference/javax/net/ssl/HttpsURLConnection)
+- [Approov Website](https://www.approov.io)
+- [Quickstart Guide](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/README.md)
+- [Changelog](CHANGELOG.md)
+- [Reference Documentation](REFERENCE.md)
+- [Usage Guide](USAGE.md)

@@ -4,6 +4,20 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.5.5] - 2026-05-22
+
+### Added
+- Public visibility getter methods `isInitialized()` and `isApproovEnabled()`.
+- Overhauled and restructured `README.md` based on the standard `3.5.3` quickstart template, with original reference links migrated to the bottom.
+- Overloaded `initialize(Context, String, String)` support to allow passing custom initialization options and reinitialization comments.
+
+### Fixed
+- Corrected parameter mapping in `initialize(Context, String, String)` to map the `comment` argument correctly to the 4th parameter of the native SDK instead of the 3rd (`updateConfig`) parameter.
+- Added safety checks for `null` and empty config strings during initialization to normalize parameters and prevent native initialization conflicts.
+- Aligned default `initialize` method to pass `null` comment instead of `""` to prevent initialization mismatches.
+- Added strict gating to all native API calls to prevent `IllegalStateException` crashes when called before initialization or during bypass mode.
+- Cleaned up static state between unit tests using a new `@VisibleForTesting` static `reset()` method.
+
 ## [3.5.4] - 2026-05-21
 
 ### Added

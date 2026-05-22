@@ -76,6 +76,12 @@ public class ApproovService {
     // hostname verifier that checks against the current Approov pins or null if SDK not initialized
     private static PinningHostnameVerifier pinningHostnameVerifier = null;
 
+    // true if the ApproovService has been initialized
+    private static boolean isInitialized = false;
+
+    // the configuration string used to initialize the Approov SDK
+    private static String configString = null;
+
     // true if request preparation should proceed on network failures and not add
     // an Approov token
     private static boolean proceedOnNetworkFail = false;
@@ -121,36 +127,111 @@ public class ApproovService {
     }
 
     /**
+     * Initializes the ApproovService with an account configuration and comment.
+     *
+     * @param context the Application context
+     * @param config the configuration string, or empty for no SDK initialization
+     * @param comment the comment string, or empty/null for default comment ("auto" is used by native SDK)
+     */
+    public static synchronized void initialize(Context context, String config, String comment) {
+        if (config == null) {
+            config = "";
+        }
+        // check if the Approov SDK is already initialized
+        boolean allowEnableAfterEmptyInitialization = isInitialized && (configString != null) && configString.isEmpty() && !config.isEmpty();
+        if (isInitialized && (comment == null || !comment.startsWith("reinit")) && !allowEnableAfterEmptyInitialization) {
+            if (!config.equals(configString)) {
+                throw new IllegalStateException("ApproovService layer is already initialized.");
+            }
+            Log.d(TAG, "Ignoring multiple ApproovService layer initializations with the same config");
+        } else {
+            // setup for using Appproov
+            isInitialized = false;
+            pinningHostnameVerifier = null;
+            proceedOnNetworkFail = false;
+            useApproovStatusIfNoToken = false;
+            approovTokenHeader = APPROOV_TOKEN_HEADER;
+            approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
+            approovTokenPrefix = APPROOV_TOKEN_PREFIX;
+            bindingHeader = null;
+            substitutionHeaders = new HashMap<>();
+            substitutionQueryParams = new HashMap<>();
+            exclusionURLRegexs = new HashMap<>();
+            serviceMutator = ApproovServiceMutator.DEFAULT;
+
+            // initialize the Approov SDK
+            try {
+                if (!config.isEmpty()) {
+                    Approov.initialize(context.getApplicationContext(), config, "auto", comment);
+                    Approov.setUserProperty("approov-service-httpsurlconn");
+                }
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Approov initialization failed: " + e.getMessage());
+                throw e;
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Approov initialization failed: " + e.getMessage());
+                throw e;
+            }
+
+            isInitialized = true;
+            configString = config;
+
+            // build the custom hostname verifier
+            if (isApproovEnabled()) {
+                pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+            } else {
+                pinningHostnameVerifier = null;
+            }
+        }
+    }
+
+    /**
      * Initializes the ApproovService with an account configuration.
      *
      * @param context the Application context
      * @param config the configuration string, or empty for no SDK initialization
      */
     public static void initialize(Context context, String config) {
-        // setup for using Appproov
+        initialize(context, config, null);
+    }
+
+    /**
+     * Indicates whether the service layer has been initialized.
+     *
+     * @return true if the service layer has been initialized, false otherwise
+     */
+    public static synchronized boolean isInitialized() {
+        return isInitialized;
+    }
+
+    /**
+     * Indicates whether Approov protection is enabled for this service layer instance.
+     * If initialization used an empty config string then the layer is initialized
+     * but Approov protection is bypassed.
+     *
+     * @return true if Approov protection is enabled, false otherwise
+     */
+    public static synchronized boolean isApproovEnabled() {
+        return isInitialized && (configString != null) && !configString.isEmpty();
+    }
+
+    /**
+     * Resets the ApproovService state. This should only be used for testing purposes.
+     */
+    static synchronized void reset() {
+        isInitialized = false;
+        configString = null;
         pinningHostnameVerifier = null;
         proceedOnNetworkFail = false;
         useApproovStatusIfNoToken = false;
-        approovTokenHeader = APPROOV_TOKEN_HEADER;
-        approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
-        approovTokenPrefix = APPROOV_TOKEN_PREFIX;
+        approovTokenHeader = null;
+        approovTraceIDHeader = null;
+        approovTokenPrefix = null;
         bindingHeader = null;
-        substitutionHeaders = new HashMap<>();
-        substitutionQueryParams = new HashMap<>();
-        exclusionURLRegexs = new HashMap<>();
         serviceMutator = ApproovServiceMutator.DEFAULT;
-        // initialize the Approov SDK
-        try {
-            if (config.length() != 0)
-                Approov.initialize(context, config, "auto", null);
-            Approov.setUserProperty("approov-service-httpsurlconn");
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Approov initialization failed: " + e.getMessage());
-            return;
-        }
-
-        // build the custom hostname verifier
-        pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+        substitutionHeaders = null;
+        substitutionQueryParams = null;
+        exclusionURLRegexs = null;
     }
 
     /**
@@ -181,6 +262,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static synchronized void setDevKey(String devKey) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "setDevKey: SDK not initialized");
+            throw new ApproovException("setDevKey: SDK not initialized");
+        }
         try {
             Approov.setDevKey(devKey);
             Log.d(TAG, "setDevKey");
@@ -457,7 +542,7 @@ public class ApproovService {
      * use cached data.
      */
     public static synchronized void prefetch() {
-        if (pinningHostnameVerifier != null)
+        if (isApproovEnabled())
             // fetch an Approov token using a placeholder domain
             Approov.fetchApproovToken(new PrefetchCallbackHandler(), "approov.io");
     }
@@ -472,6 +557,10 @@ public class ApproovService {
     //
     // @throws ApproovException if there was a problem
     public static void precheck() throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "precheck: SDK not initialized");
+            throw new ApproovException("precheck: SDK not initialized");
+        }
         // try and fetch a non-existent secure string in order to check for a rejection
         Approov.TokenFetchResult approovResults;
         try {
@@ -498,6 +587,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getDeviceID() throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getDeviceID: SDK not initialized");
+            throw new ApproovException("getDeviceID: SDK not initialized");
+        }
         try {
             String deviceID = Approov.getDeviceID();
             Log.d(TAG, "getDeviceID: " + deviceID);
@@ -519,6 +612,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static void setDataHashInToken(String data) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "setDataHashInToken: SDK not initialized");
+            throw new ApproovException("setDataHashInToken: SDK not initialized");
+        }
         try {
             Approov.setDataHashInToken(data);
             Log.d(TAG, "setDataHashInToken");
@@ -545,6 +642,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchToken(String url) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "fetchToken: SDK not initialized");
+            throw new ApproovException("fetchToken: SDK not initialized");
+        }
         // fetch the Approov token
         Approov.TokenFetchResult approovResults;
         try {
@@ -598,6 +699,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchSecureString(String key, String newDef) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "fetchSecureString: SDK not initialized");
+            throw new ApproovException("fetchSecureString: SDK not initialized");
+        }
         // determine the type of operation as the values themselves cannot be logged
         String type = "lookup";
         if (newDef != null)
@@ -633,6 +738,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchCustomJWT(String payload) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "fetchCustomJWT: SDK not initialized");
+            throw new ApproovException("fetchCustomJWT: SDK not initialized");
+        }
         // fetch the custom JWT catching any exceptions the SDK might throw
         Approov.TokenFetchResult approovResults;
         try {
@@ -660,6 +769,10 @@ public class ApproovService {
      * @return String ARC from last attestation request or empty string if network unavailable
      */
     public static String getLastARC() {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getLastARC: SDK not initialized");
+            return "";
+        }
         // Get the dynamic pins from Approov
         Map<String, List<String>> approovPins = Approov.getPins("public-key-sha256");
         if (approovPins == null || approovPins.isEmpty()) {
@@ -707,6 +820,10 @@ public class ApproovService {
      * @throws ApproovException if the attrs parameter is invalid or the SDK is not initialized
      */
     public static void setInstallAttrsInToken(String attrs) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "setInstallAttrsInToken: SDK not initialized");
+            throw new ApproovException("setInstallAttrsInToken: SDK not initialized");
+        }
         try {
             Approov.setInstallAttrsInToken(attrs);
             Log.d(TAG, "setInstallAttrsInToken");
@@ -779,6 +896,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getAccountMessageSignature(String message) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getAccountMessageSignature: SDK not initialized");
+            throw new ApproovException("getAccountMessageSignature: SDK not initialized");
+        }
         try {
             String signature = Approov.getAccountMessageSignature(message);
             Log.d(TAG, "getAccountMessageSignature");
@@ -812,6 +933,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getInstallMessageSignature(String message) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getInstallMessageSignature: SDK not initialized");
+            throw new ApproovException("getInstallMessageSignature: SDK not initialized");
+        }
         try {
             String signature = Approov.getInstallMessageSignature(message);
             Log.d(TAG, "getInstallMessageSignature");
@@ -927,8 +1052,13 @@ public class ApproovService {
      */
     static synchronized PreparedRequestData prepareApproovRequest(HttpsURLConnection request) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
+
+        if (!isApproovEnabled()) {
+            // In bypass mode, return empty/noop modifications immediately without invoking processed request callback
+            return new PreparedRequestData(getServiceMutator(), new ApproovRequestMutations(), false);
+        }
 
         // cache the mutator for the duration of the request processing to make
         // sure it is not changed mid-flight
@@ -1047,8 +1177,12 @@ public class ApproovService {
     static synchronized QuerySubstitutionResult substituteQueryParamsDetailed(URL url, ApproovServiceMutator mutator)
             throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
+
+        if (!isApproovEnabled()) {
+            return new QuerySubstitutionResult(url, url.toString(), Collections.emptyList());
+        }
 
         // check if the URL matches one of the exclusion regexs and just return if so
         String originalURL = url.toString();
@@ -1135,7 +1269,7 @@ public class ApproovService {
             boolean allowBufferedConnection
     ) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
 
         // Apply the non-signing parts of the HttpsURLConnection preparation flow immediately so
@@ -1209,8 +1343,12 @@ public class ApproovService {
      */
     public static synchronized URL substituteQueryParam(URL url, String queryParameter) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
+
+        if (!isApproovEnabled()) {
+            return url;
+        }
 
         // check if the URL matches one of the exclusion regexs and just return if so
         String urlString = url.toString();
@@ -1366,6 +1504,9 @@ final class PinningHostnameVerifier implements HostnameVerifier {
 
     @Override
     public boolean verify(String hostname, SSLSession session) {
+        if (!ApproovService.isApproovEnabled()) {
+            return true;
+        }
         // check the delegate function first and only proceed if it passes
         if (delegate.verify(hostname, session)) try {
             // extract the set of valid pins for the hostname
