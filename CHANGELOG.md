@@ -4,6 +4,14 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.5.6] - 2026-05-30
+
+### Improved
+- Tightened SDK initialization: service-layer state is now only reset and committed after the native SDK confirms success, preserving the prior operating mode (protected or bypass) if initialization fails.
+- `null` config now throws `IllegalArgumentException` instead of being silently coerced to bypass mode; pass `""` explicitly for bypass.
+
+---
+
 ## [3.5.5] - 2026-05-22
 
 ### Added
