@@ -134,54 +134,44 @@ public class ApproovService {
      * @param comment the comment string, or empty/null for default comment ("auto" is used by native SDK)
      */
     public static synchronized void initialize(Context context, String config, String comment) {
-        if (config == null) {
-            config = "";
-        }
-        // check if the Approov SDK is already initialized
-        boolean allowEnableAfterEmptyInitialization = isInitialized && (configString != null) && configString.isEmpty() && !config.isEmpty();
-        if (isInitialized && (comment == null || !comment.startsWith("reinit")) && !allowEnableAfterEmptyInitialization) {
-            if (!config.equals(configString)) {
-                throw new IllegalStateException("ApproovService layer is already initialized.");
-            }
-            Log.d(TAG, "Ignoring multiple ApproovService layer initializations with the same config");
-        } else {
-            // setup for using Appproov
-            isInitialized = false;
-            pinningHostnameVerifier = null;
-            proceedOnNetworkFail = false;
-            useApproovStatusIfNoToken = false;
-            approovTokenHeader = APPROOV_TOKEN_HEADER;
-            approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
-            approovTokenPrefix = APPROOV_TOKEN_PREFIX;
-            bindingHeader = null;
-            substitutionHeaders = new HashMap<>();
-            substitutionQueryParams = new HashMap<>();
-            exclusionURLRegexs = new HashMap<>();
-            serviceMutator = ApproovServiceMutator.DEFAULT;
+        if (config == null)
+            throw new IllegalArgumentException("config must not be null; pass \"\" for bypass mode");
 
-            // initialize the Approov SDK
+        // Initialize the platform SDK if not in bypass mode (empty config).
+        // State is only modified after the SDK confirms success, preserving the current
+        // operating mode (protected or bypass) if the call fails.
+        if (!config.isEmpty()) {
             try {
-                if (!config.isEmpty()) {
-                    Approov.initialize(context.getApplicationContext(), config, "auto", comment);
-                    Approov.setUserProperty("approov-service-httpsurlconn");
+                boolean sdkInitialized = Approov.initialize(context.getApplicationContext(), config, "auto", comment);
+                if (!sdkInitialized) {
+                    Log.d(TAG, "Approov SDK already initialized");
                 }
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "Approov initialization failed: " + e.getMessage());
-                throw e;
+                throw e; // service-layer state NOT modified — prior operating mode preserved
             } catch (IllegalStateException e) {
                 Log.e(TAG, "Approov initialization failed: " + e.getMessage());
-                throw e;
+                throw e; // service-layer state NOT modified — prior operating mode preserved
             }
-
-            isInitialized = true;
-            configString = config;
-
-            // build the custom hostname verifier
-            if (isApproovEnabled()) {
-                pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
-            } else {
-                pinningHostnameVerifier = null;
-            }
+        }
+        // SDK succeeded (or bypass) — now reset and commit new service-layer state.
+        isInitialized = false;
+        pinningHostnameVerifier = null;
+        proceedOnNetworkFail = false;
+        useApproovStatusIfNoToken = false;
+        approovTokenHeader = APPROOV_TOKEN_HEADER;
+        approovTraceIDHeader = APPROOV_TRACE_ID_HEADER;
+        approovTokenPrefix = APPROOV_TOKEN_PREFIX;
+        bindingHeader = null;
+        substitutionHeaders = new HashMap<>();
+        substitutionQueryParams = new HashMap<>();
+        exclusionURLRegexs = new HashMap<>();
+        serviceMutator = ApproovServiceMutator.DEFAULT;
+        isInitialized = true;
+        configString = config;
+        if (isApproovEnabled()) {
+            pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+            Approov.setUserProperty("approov-service-httpsurlconn");
         }
     }
 

@@ -1,9 +1,11 @@
 package io.approov.service.httpsurlconn;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -40,7 +42,7 @@ public class ApproovServiceTest {
         when(context.getApplicationContext()).thenReturn(context);
         mockApproov = Mockito.mockStatic(Approov.class);
         mockAndroidBase64 = Mockito.mockStatic(android.util.Base64.class);
-        mockApproov.when(() -> Approov.initialize(Mockito.any(), Mockito.anyString(), Mockito.anyString(), Mockito.any())).thenAnswer(invocation -> null);
+        mockApproov.when(() -> Approov.initialize(Mockito.any(), Mockito.anyString(), Mockito.anyString(), Mockito.any())).thenReturn(false);
         mockApproov.when(() -> Approov.setUserProperty(Mockito.anyString())).thenAnswer(invocation -> null);
         mockAndroidBase64.when(() -> android.util.Base64.decode(Mockito.anyString(), Mockito.anyInt()))
                 .thenAnswer(invocation ->
@@ -204,11 +206,11 @@ public class ApproovServiceTest {
     }
 
     @Test
-    public void initializeWithNullConfigNormalizesToEmptyConfig() {
+    public void initializeWithNullConfigThrowsIllegalArgument() {
         ApproovService.reset();
-        ApproovService.initialize(context, null);
-        assertTrue(ApproovService.isInitialized());
-        org.junit.Assert.assertFalse(ApproovService.isApproovEnabled());
+        assertThrows(IllegalArgumentException.class, () -> ApproovService.initialize(context, null));
+        // Per TESTING_REQUIREMENTS §17-18: failure preserves the prior (reset/uninitialised) state.
+        assertFalse(ApproovService.isInitialized());
     }
 
     @Test
@@ -279,15 +281,22 @@ public class ApproovServiceTest {
         ApproovService.initialize(context, CONFIG);
     }
 
-    @Test(expected = IllegalStateException.class)
-    public void doubleInitializationThrowsOnDifferentConfig() {
+    @Test
+    public void doubleInitializationThrowsOnDifferentConfigAndPreservesState() {
         ApproovService.reset();
         ApproovService.initialize(context, CONFIG);
         assertTrue(ApproovService.isInitialized());
         assertTrue(ApproovService.isApproovEnabled());
-        
-        // This must throw IllegalStateException
-        ApproovService.initialize(context, "different-config");
+
+        // SDK throws when initialized with a conflicting config.
+        mockApproov.when(() -> Approov.initialize(context, "different-config", "auto", null))
+                   .thenThrow(new IllegalStateException("config conflict"));
+
+        assertThrows(IllegalStateException.class,
+                () -> ApproovService.initialize(context, "different-config"));
+        // Per TESTING_REQUIREMENTS §17-18: failure preserves the prior operating state.
+        assertTrue(ApproovService.isInitialized());
+        assertTrue(ApproovService.isApproovEnabled());
     }
 
     @Test
