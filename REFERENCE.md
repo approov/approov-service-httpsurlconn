@@ -15,7 +15,7 @@ If a method throws an `ApproovRejectionException`, the app failed attestation. A
 
 ## initialize
 
-Initializes the Approov SDK and enables the Approov features. The `config` will have been provided in the initial onboarding or email or can be obtained using the approov CLI. This will generate an error if a second attempt is made at initialization with a different `config` without utilizing the reinitialization comment.
+Initializes the Approov SDK and enables the Approov features. The `config` will have been provided in the initial onboarding or email or can be obtained using the approov CLI. A second attempt to initialize with a different `config` (without using the reinitialization comment) is forwarded to the native SDK, which throws an `IllegalStateException` that this method surfaces unchanged.
 
 **Java:**
 ```java
@@ -32,6 +32,10 @@ The application context must be provided using the `context` parameter.
 It is possible to pass an empty `config` string to indicate that no initialization of the underlying native Approov SDK is required. This initializes the service layer in a bypass mode, allowing you to obtain standard, non-Approov protected connections. If you attempt to use any direct native Approov SDK functions (such as `fetchToken` or `precheck`) while bypassed, an `ApproovException` will be thrown. You may later call `initialize` again with a valid `config` string to enable Approov protection for connections obtained after that point.
 
 An alternative initialization function allows you to provide further options or trigger reinitialization in the `comment` parameter. Please refer to the [Approov SDK documentation](https://approov.io/docs/latest/approov-direct-sdk-integration/#sdk-initialization-options) for details.
+
+**Throws** (both are unchecked and propagate directly; the service-layer state is left unchanged on failure):
+- `IllegalArgumentException` — if `config` is `null`. Pass `""` for bypass mode.
+- `IllegalStateException` — if the native SDK rejects the configuration, e.g. a different non-empty `config` than the one already initialized (an empty `config` after a valid one is ignored, not an error).
 
 **Java:**
 ```java

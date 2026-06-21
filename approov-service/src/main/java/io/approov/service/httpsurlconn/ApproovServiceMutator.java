@@ -289,48 +289,6 @@ public interface ApproovServiceMutator {
     }
 
     /**
-     * Decides how to handle the token fetch result while substituting query params
-     * during request preparation. The passed fetch result to process is associated
-     * with a preceding call to Approov.fetchSecureStringAndWait which passed in the
-     * query value of a matching query key. This method is called once for each
-     * matched
-     * query parameter being processed for substitution.
-     *
-     * @param approovResults the TokenFetchResult from Approov
-     * @param queryKey       the query parameter key being substituted
-     * @return true if substitution should proceed, false if it should be skipped
-     * @throws ApproovException The implementation can either return to indicate the
-     *                          action described above or throw an ApproovException
-     *                          encoding the cause of the failure
-     */
-    @SuppressWarnings("deprecation")
-    default boolean handleInterceptorQueryParamSubstitutionResult(Approov.TokenFetchResult approovResults,
-            String queryKey) throws ApproovException {
-        Approov.TokenFetchStatus status = approovResults.getStatus();
-        String arc = approovResults.getARC();
-        String rejectionReasons = approovResults.getRejectionReasons();
-        switch (status) {
-            case SUCCESS:
-                return true;
-            case REJECTED:
-                throw new ApproovRejectionException("Query parameter substitution for " + queryKey + ": "
-                        + status.toString() + ": " + arc + " " + rejectionReasons, arc, rejectionReasons);
-            case NO_NETWORK:
-            case POOR_NETWORK:
-            case MITM_DETECTED:
-                if (!ApproovService.getProceedOnNetworkFail())
-                    throw new ApproovNetworkException(status,
-                            "Query parameter substitution for " + queryKey + ": " + status.toString());
-                return false;
-            case UNKNOWN_KEY:
-                return false;
-            default:
-                throw new ApproovFetchStatusException(status,
-                        "Query parameter substitution for " + queryKey + ": " + status.toString());
-        }
-    }
-
-    /**
      * Called after the httpsurlconn service layer has applied its token and
      * substitution changes, allowing further request modifications such as
      * message signing.

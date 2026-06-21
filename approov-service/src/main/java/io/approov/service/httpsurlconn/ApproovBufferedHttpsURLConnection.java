@@ -103,13 +103,6 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
         this.sslSocketFactory = request.getSSLSocketFactory();
         this.hostnameVerifier = request.getHostnameVerifier();
         this.requestProperties = copyRequestProperties(request.getRequestProperties());
-
-        if (!queryResult.substitutedQueryKeys.isEmpty()) {
-            preparedRequestData.changes.setSubstitutionQueryParamResults(
-                    queryResult.originalURL,
-                    queryResult.substitutedQueryKeys
-            );
-        }
     }
 
     /**

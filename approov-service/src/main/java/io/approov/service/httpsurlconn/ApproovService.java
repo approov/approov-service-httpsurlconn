@@ -950,22 +950,15 @@ public class ApproovService {
     }
 
     /**
-     * Holds the outcome of configured query parameter substitutions so callers can
-     * update both the effective URL and the mutation metadata in a single step.
+     * Holds the effective URL for a prepared request. Automated query-parameter substitution
+     * was removed (Issue #14), so the URL is never changed here; this wrapper is retained only
+     * to carry the URL into the buffered-connection body-digest flow.
      */
     static final class QuerySubstitutionResult {
         final URL url;
-        final String originalURL;
-        final List<String> substitutedQueryKeys;
 
-        QuerySubstitutionResult(URL url, String originalURL, List<String> substitutedQueryKeys) {
+        QuerySubstitutionResult(URL url) {
             this.url = url;
-            this.originalURL = originalURL;
-            this.substitutedQueryKeys = substitutedQueryKeys;
-        }
-
-        boolean hasEffectiveUrlChange() {
-            return !originalURL.equals(url.toString());
         }
     }
 
@@ -975,17 +968,9 @@ public class ApproovService {
      * written after addApproov returns.
      *
      * @param request is the request being prepared
-     * @param querySubstitutionResult is the configured URL substitution result
      * @return true if the caller must continue using a buffered connection wrapper
      */
-    private static boolean shouldUseBufferedConnection(
-            HttpsURLConnection request,
-            QuerySubstitutionResult querySubstitutionResult
-    ) {
-        if (querySubstitutionResult.hasEffectiveUrlChange()) {
-            return true;
-        }
-
+    private static boolean shouldUseBufferedConnection(HttpsURLConnection request) {
         if (request.getDoOutput()) {
             return true;
         }
@@ -1205,9 +1190,8 @@ public class ApproovService {
         // Query parameters are never auto-substituted (Issue #14), so the effective URL never
         // changes here. A buffered connection is still used for body-bearing methods so message
         // signing can compute the Content-Digest over the body written after addApproov returns.
-        QuerySubstitutionResult querySubstitutionResult = new QuerySubstitutionResult(
-                request.getURL(), request.getURL().toString(), Collections.emptyList());
-        if (shouldUseBufferedConnection(request, querySubstitutionResult) && allowBufferedConnection) {
+        QuerySubstitutionResult querySubstitutionResult = new QuerySubstitutionResult(request.getURL());
+        if (shouldUseBufferedConnection(request) && allowBufferedConnection) {
             return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
         }
 

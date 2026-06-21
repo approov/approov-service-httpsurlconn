@@ -699,7 +699,10 @@ public class ApproovServiceMiniSdkTest {
             
             String signature = getHeader(reply, "Signature");
             assertNotNull(signature);
-            assertTrue(signature.startsWith("install="));
+            // Signature member value MUST be a Byte Sequence: install=:<base64>: (RFC 9421 §4.2),
+            // NOT the quoted-string form install="...". The =:...: colons prove the byte sequence.
+            assertTrue("Signature must be a byte sequence (install=:<base64>:)",
+                    signature.startsWith("install=:") && signature.endsWith(":"));
             assertFalse(signature.contains("account="));
         }
         
@@ -742,7 +745,9 @@ public class ApproovServiceMiniSdkTest {
             
             String signature = getHeader(reply, "Signature");
             assertNotNull(signature);
-            assertTrue(signature.startsWith("account="));
+            // Byte Sequence form: account=:<base64>: (RFC 9421 §4.2), not account="...".
+            assertTrue("Signature must be a byte sequence (account=:<base64>:)",
+                    signature.startsWith("account=:") && signature.endsWith(":"));
             assertFalse(signature.contains("install="));
         }
     }
