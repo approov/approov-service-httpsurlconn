@@ -18,6 +18,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Fixed
 - A **required** body digest that cannot be generated now fails closed via `ApproovException` (the documented `addApproov` contract) rather than a raw `IllegalStateException`.
+- **Empty config after a valid config is now ignored** (§1) — it no longer resets state / downgrades a protected layer to bypass. Approov protection remains active under the original config and the empty call is not forwarded to the SDK.
+- `setApproovHeader(header, null)` no longer prepends the literal string `"null"` to the token — a `null` prefix is treated as no prefix (§2 Custom Header Prefixes).
+- Bypass-mode hostname verification now delegates to the default/OS verifier instead of accepting unconditionally, so OS certificate/hostname trust validation is never skipped (§4 "Bypass Mode Must Not Skip Certificate Trust Validation").
+- An empty trace ID returned by the SDK is now emitted as an empty header value rather than omitted (§2 Missing Artifacts Fallback).
 
 ## [3.5.6] - 2026-05-30
 

@@ -133,6 +133,15 @@ public class ApproovService {
         if (config == null)
             throw new IllegalArgumentException("config must not be null; pass \"\" for bypass mode");
 
+        // If already initialized with a valid (non-empty) config, ignore a later empty-config
+        // call: the existing Approov protection must remain active and the call must not be
+        // forwarded to the SDK or reset any service-layer state (TESTING_REQUIREMENTS §1,
+        // "Empty Configuration after Valid Configuration").
+        if (isApproovEnabled() && config.isEmpty()) {
+            Log.d(TAG, "ApproovService already initialized with a valid config; ignoring empty configuration");
+            return;
+        }
+
         // Initialize the platform SDK if not in bypass mode (empty config).
         // State is only modified after the SDK confirms success, preserving the current
         // operating mode (protected or bypass) if the call fails.
@@ -273,7 +282,9 @@ public class ApproovService {
     public static synchronized void setApproovHeader(String header, String prefix) {
         Log.d(TAG, "setApproovHeader " + header + ", " + prefix);
         approovTokenHeader = header;
-        approovTokenPrefix = prefix;
+        // A null prefix means "no prefix" — coerce to "" so it is never concatenated as the
+        // literal string "null" before the token (TESTING_REQUIREMENTS §2 Custom Header Prefixes).
+        approovTokenPrefix = (prefix != null) ? prefix : APPROOV_TOKEN_PREFIX;
     }
 
     /**
@@ -1060,7 +1071,10 @@ public class ApproovService {
 
             String traceIDHeader = getApproovTraceIDHeader();
             String traceID = getTokenFetchTraceID(approovResults);
-            if ((traceIDHeader != null) && (traceID != null) && !traceID.isEmpty()) {
+            // Emit the trace header whenever the SDK provides a value, even an empty one, as
+            // evidence that Approov processing occurred (TESTING_REQUIREMENTS §2 Missing Artifacts
+            // Fallback). Only a null trace ID (none available) leaves the header off.
+            if ((traceIDHeader != null) && (traceID != null)) {
                 setTraceIDHeaderKey = traceIDHeader;
                 setTraceIDHeaderValue = traceID;
             }
@@ -1328,7 +1342,10 @@ final class PinningHostnameVerifier implements HostnameVerifier {
     @Override
     public boolean verify(String hostname, SSLSession session) {
         if (!ApproovService.isApproovEnabled()) {
-            return true;
+            // Bypass mode: skip Approov pinning, but still apply standard hostname
+            // verification via the OS/default verifier — never blindly accept
+            // (TESTING_REQUIREMENTS §4 "Bypass Mode Must Not Skip Certificate Trust Validation").
+            return delegate.verify(hostname, session);
         }
         // check the delegate function first and only proceed if it passes
         if (delegate.verify(hostname, session)) try {

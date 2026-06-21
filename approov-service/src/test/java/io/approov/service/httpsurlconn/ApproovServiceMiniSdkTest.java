@@ -92,6 +92,23 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
+     * §1 Empty Configuration after Valid Configuration: an empty-config init after a valid one
+     * is ignored — Approov protection remains active under the original config and the empty
+     * call is not forwarded to the SDK.
+     */
+    @Test
+    public void testEmptyConfigAfterValidIsIgnored() {
+        // setUp initialized with a valid config, so the layer is enabled.
+        assertTrue(ApproovService.isApproovEnabled());
+
+        // An empty-config init must be ignored, not downgrade the layer to bypass.
+        ApproovService.initialize(context, "", "reinit-empty-ignored");
+
+        assertTrue(ApproovService.isInitialized());
+        assertTrue("empty config after valid must NOT disable Approov", ApproovService.isApproovEnabled());
+    }
+
+    /**
      * §1 Empty Configuration (Valid Comment) / Empty Configuration (Empty Comment)
      *
      * Initializing with an empty config should keep the service layer initialized
@@ -102,6 +119,9 @@ public class ApproovServiceMiniSdkTest {
     public void testInitializeWithEmptyConfigBuildsPlainClient() throws Exception {
         reinitializeService(scenarioJson(uniqueCaseName("empty-config"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
+        // reach bypass from a clean state: an empty config after a valid one is now ignored
+        // (§1 "Empty Configuration after Valid Configuration"), so reset before the empty init.
+        resetApproovServiceState();
         ApproovService.initialize(context, "", "reinit-empty-config");
 
         assertTrue(ApproovService.isInitialized());
@@ -127,6 +147,9 @@ public class ApproovServiceMiniSdkTest {
     public void testInitializeWithEmptyConfigCanLaterEnableApproov() throws Exception {
         reinitializeService(scenarioJson(uniqueCaseName("empty-then-valid"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
+        // reach bypass from a clean state: an empty config after a valid one is now ignored
+        // (§1 "Empty Configuration after Valid Configuration"), so reset before the empty init.
+        resetApproovServiceState();
         ApproovService.initialize(context, "", "reinit-empty-config");
 
         HttpsURLConnection connection = (HttpsURLConnection) new URL(getTargetURL()).openConnection();
@@ -1074,6 +1097,9 @@ public class ApproovServiceMiniSdkTest {
         resetApproovServiceState();
         reinitializeService(scenarioJson(uniqueCaseName("first-empty-config"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
+        // reinitializeService does a valid init; reset so the empty init below is a fresh
+        // first-init (§1 "Empty Configuration"), not an ignored empty-after-valid (§1 L10).
+        resetApproovServiceState();
         ApproovService.initialize(context, "", "reinit-first-empty");
         
         assertTrue(ApproovService.isInitialized());
