@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.library'
     id 'maven-publish'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 repositories {
@@ -17,6 +18,7 @@ android {
     defaultConfig {
         minSdkVersion 23
         targetSdkVersion 34
+        consumerProguardFiles 'consumer-rules.pro'
     }
 
     buildTypes {
@@ -35,15 +37,36 @@ android {
     }
 }
 
+configurations {
+    shadowed
+}
+
+// Shade + relocate BouncyCastle into a layer-private namespace so it is not exposed as a
+// dependency and cannot clash with an app's own copy. Note the intermediate `httpsurlconn`
+// segment (TESTING_REQUIREMENTS §9.2). bcprov is declared in the `shadowed` config (not
+// implementation), removing it from the published POM.
+tasks.register('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    archiveClassifier.set('shadow')
+    configurations = [project.configurations.shadowed]
+    relocate 'org.bouncycastle', 'io.approov.internal.httpsurlconn.bouncycastle'
+    exclude 'META-INF/**'
+}
+
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'io.approov:approov-android-sdk:3.5.1'
 
-    // Bouncycastle for ASN.1 parsing
-    implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    // Bouncycastle for ASN.1 parsing — shaded/relocated into io.approov.internal.httpsurlconn.bouncycastle
+    shadowed 'org.bouncycastle:bcprov-jdk15to18:1.84'
+    compileOnly files(tasks.named('shadowJar'))
+    implementation files(tasks.named('shadowJar'))
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.14.2'
+}
+
+tasks.withType(JavaCompile) {
+    dependsOn tasks.named('shadowJar')
 }
