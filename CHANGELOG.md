@@ -6,8 +6,17 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [3.5.7] - 2026-06-21
 
+### Added
+- Mini-SDK integration test suite (`ApproovServiceMiniSdkTest`, `ApproovNativeSdkTest`) wired against `core-service-layers-testing/mini-sdk`, exercising the TESTING_REQUIREMENTS scenarios.
+
+### Changed
+- **`NO_APPROOV_SERVICE`**: the request now proceeds with an **empty** `Approov-Token` header (and a trace ID if the SDK provides one) as evidence that Approov processing occurred, instead of omitting the headers (root §2 Missing Artifacts Fallback).
+
 ### Removed
 - **Automated query parameter substitution** (`addSubstitutionQueryParam`, `removeSubstitutionQueryParam`, `getSubstitutionQueryParams`, `substituteQueryParams`, `substituteQueryParam`) — Issue #14. `java.net.URL` is immutable once the connection is opened, and the automated path broke the request-mutation tracking that message signing relies on. Fetch secure-string query values with `fetchSecureString()` and build the URL before `openConnection()` (see USAGE.md / REFERENCE.md).
+
+### Fixed
+- A **required** body digest that cannot be generated now fails closed via `ApproovException` (the documented `addApproov` contract) rather than a raw `IllegalStateException`.
 
 ## [3.5.6] - 2026-05-30
 

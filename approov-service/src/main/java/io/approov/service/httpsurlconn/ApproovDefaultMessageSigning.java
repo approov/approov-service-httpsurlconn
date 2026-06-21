@@ -222,7 +222,15 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         }
         // generate and add a message signature
         HttpsURLConnectionComponentProvider provider = new HttpsURLConnectionComponentProvider(request);
-        SignatureParameters params = buildSignatureParameters(provider, changes);
+        SignatureParameters params;
+        try {
+            params = buildSignatureParameters(provider, changes);
+        } catch (IllegalStateException e) {
+            // Deliberate fail-closed conditions (a required body digest that cannot be generated,
+            // or unconfigured base parameters) must surface via the documented ApproovException
+            // contract of addApproov(...), not as a raw unchecked exception.
+            throw new ApproovException(e.getMessage());
+        }
         if (params == null) {
             // No sig to be added to the request; return the original request.
             return request;

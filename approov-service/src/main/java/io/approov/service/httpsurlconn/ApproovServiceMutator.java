@@ -234,8 +234,12 @@ public interface ApproovServiceMutator {
                             "Approov token fetch for " + url + ": " + status.toString());
                 return false;
             case NO_APPROOV_SERVICE:
+                // Approov service unavailable but the request proceeds: emit the (empty) token
+                // header — and any trace ID — as evidence that Approov processing occurred
+                // (TESTING_REQUIREMENTS §2 Missing Artifacts Fallback), rather than omitting it.
+                return true;
             case UNKNOWN_URL:
-            case UNPROTECTED_URL: // Continue without token for unprotected URLs
+            case UNPROTECTED_URL: // Continue without any headers for unprotected URLs (anti-MitM)
                 return false;
             default:
                 throw new ApproovFetchStatusException(status,
