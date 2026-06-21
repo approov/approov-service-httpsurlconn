@@ -1,5 +1,11 @@
 # Approov Service for HttpsURLConnection
 
+![Java](https://img.shields.io/badge/Java-8%2B-007396?logo=openjdk&logoColor=white)
+![Android](https://img.shields.io/badge/Android-minSdk%2021-3DDC84?logo=android&logoColor=white)
+![Maven Central](https://img.shields.io/maven-central/v/io.approov/service.httpsurlconn?logo=apachemaven&logoColor=white&label=Maven%20Central)
+![Message Signing](https://img.shields.io/badge/Message%20Signing-RFC%209421-1f6feb)
+![Build](https://github.com/approov/approov-service-httpsurlconn/actions/workflows/build_only.yml/badge.svg)
+
 This package is an open-source wrapper layer that allows you to easily use Approov with `HttpsURLConnection` in native Android apps written in Java.
 
 This page provides the steps for integrating Approov into your app. Additionally, a step-by-step tutorial guide using our [Shapes App Example](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SHAPES-EXAMPLE.md) is also available.
@@ -34,18 +40,41 @@ Please [read this](https://approov.io/docs/latest/approov-usage-documentation/#t
 In order to use the `ApproovService` you must initialize it when your app is created, usually in the `onCreate` method:
 
 ```Java
+import android.util.Log;
 import io.approov.service.httpsurlconn.ApproovService;
+import java.util.UUID;
 
 public class YourApp extends Application {
+    private static final String TAG = "YourApp";
+
     @Override
     public void onCreate() {
         super.onCreate();
-        ApproovService.initialize(getApplicationContext(), "<enter-your-config-string-here>");
+
+        // An app-generated id used to correlate this install/session across your own app
+        // logs and your backend. Use a UUID, or any session/user identifier you already
+        // have — it is NOT an Approov secret.
+        String correlationId = UUID.randomUUID().toString();
+
+        try {
+            ApproovService.initialize(getApplicationContext(), "<enter-your-config-string-here>");
+            // Initialization succeeded — log identifiers for correlation / observability.
+            Log.i(TAG, "Approov initialized; deviceID=" + ApproovService.getDeviceID()
+                    + " session=" + correlationId);
+        } catch (Exception e) {
+            // Initialization failed — log it and continue UNPROTECTED so the app still works.
+            // Re-initializing with an empty config string enters bypass mode (initialized, but
+            // no Approov token injection, pinning, or secret substitution).
+            Log.e(TAG, "Approov init failed (session=" + correlationId + "); continuing unprotected", e);
+            ApproovService.initialize(getApplicationContext(), "");
+        }
     }
 }
 ```
 
 The `<enter-your-config-string-here>` is a custom string that configures your Approov account access. This will have been provided in your Approov onboarding email.
+
+On success the example logs the Approov **device ID** (`getDeviceID()`) and an **app-generated session/correlation id** (a UUID, or any session/user identifier you use) so a given install can be correlated across your app logs, backend, and the Approov [Live Metrics](https://approov.io/docs/latest/approov-usage-documentation/#metrics-graphs). If initialization fails, the example re-initializes with an empty config so the app keeps working — but those requests go out **without Approov protection**, so treat the backend as the enforcement point.
 
 ## USING APPROOV SERVICE
 You can then make Approov enabled `HttpsURLConnection` API calls using the following call on any `HttpsURLConnection` connection, just before the connection is made:
