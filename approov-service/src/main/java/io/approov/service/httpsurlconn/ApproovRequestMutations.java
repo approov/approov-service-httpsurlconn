@@ -29,6 +29,7 @@ public class ApproovRequestMutations {
     private String originalURL;
     private List<String> substitutionQueryParamKeys;
     private String traceIDHeaderKey;
+    private byte[] bodyBytes;
 
 
     /**
@@ -112,5 +113,24 @@ public class ApproovRequestMutations {
      */
     public void setTraceIDHeaderKey(String traceIDHeaderKey) {
         this.traceIDHeaderKey = traceIDHeaderKey;
+    }
+
+    /**
+     * Gets the request body bytes supplied via the {@code addApproov(connection, byte[])}
+     * overload, used to compute the message-signing {@code Content-Digest}.
+     *
+     * @return the request body bytes, or null if none were supplied
+     */
+    public byte[] getBodyBytes() {
+        return bodyBytes;
+    }
+
+    /**
+     * Sets the request body bytes used to compute the message-signing {@code Content-Digest}.
+     *
+     * @param bodyBytes the request body bytes
+     */
+    public void setBodyBytes(byte[] bodyBytes) {
+        this.bodyBytes = bodyBytes;
     }
 }

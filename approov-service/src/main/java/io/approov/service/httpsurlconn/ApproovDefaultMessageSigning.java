@@ -526,14 +526,18 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          */
         protected boolean generateBodyDigest(
                 HttpsURLConnectionComponentProvider provider,
-                SignatureParameters requestParameters
+                SignatureParameters requestParameters,
+                byte[] explicitBody
         ) {
-            HttpsURLConnection request = provider.request;
-            if (!(request instanceof ApproovBufferedHttpsURLConnection)) {
-                return false;
+            // Prefer body bytes supplied explicitly via addApproov(connection, byte[]);
+            // otherwise fall back to a buffered connection body if one is available.
+            byte[] body = explicitBody;
+            if (body == null) {
+                HttpsURLConnection request = provider.request;
+                if (request instanceof ApproovBufferedHttpsURLConnection) {
+                    body = ((ApproovBufferedHttpsURLConnection) request).getBufferedRequestBody();
+                }
             }
-
-            byte[] body = ((ApproovBufferedHttpsURLConnection) request).getBufferedRequestBody();
             if (body == null || body.length == 0) {
                 return false;
             }
@@ -554,7 +558,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             digestMap.put(bodyDigestAlgorithm, ByteSequenceItem.valueOf(digest.toByteArray()));
             Dictionary digestHeader = Dictionary.valueOf(digestMap);
 
-            request.setRequestProperty("Content-Digest", digestHeader.serialize());
+            provider.request.setRequestProperty("Content-Digest", digestHeader.serialize());
             requestParameters.addComponentIdentifier("Content-Digest");
             return true;
         }
@@ -601,7 +605,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 }
             }
             if (bodyDigestAlgorithm != null) {
-                if (!generateBodyDigest(provider, requestParameters) && bodyDigestRequired) {
+                if (!generateBodyDigest(provider, requestParameters, changes.getBodyBytes()) && bodyDigestRequired) {
                     throw new IllegalStateException("Failed to create required body digest");
                 }
             }

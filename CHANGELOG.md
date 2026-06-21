@@ -6,6 +6,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [3.5.6] - 2026-05-30
 
+### Added
+- `addApproov(HttpsURLConnection, byte[])` overload that computes the message-signing `Content-Digest` over the supplied repeatable body bytes and covers it with the signature (TESTING_REQUIREMENTS supp §4). The legacy `addApproov(HttpsURLConnection)` still gracefully skips the body digest when no body is available.
+
 ### Improved
 - Tightened SDK initialization: service-layer state is now only reset and committed after the native SDK confirms success, preserving the prior operating mode (protected or bypass) if initialization fails.
 - `null` config now throws `IllegalArgumentException` instead of being silently coerced to bypass mode; pass `""` explicitly for bypass.

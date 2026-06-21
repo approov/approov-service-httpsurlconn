@@ -1229,7 +1229,22 @@ public class ApproovService {
      *                          secure strings
      */
     public static synchronized void addApproov(HttpsURLConnection request) throws ApproovException {
-        addApproovInternal(request, false);
+        addApproovInternal(request, false, null);
+    }
+
+    /**
+     * Adds Approov to the given request, supplying the request body bytes so that a
+     * message-signing {@code Content-Digest} can be computed over them. Use this overload
+     * when message signing is configured with a body digest and the body is available as a
+     * repeatable byte array. The SHA-256 (or SHA-512) digest of {@code body} is set in the
+     * {@code Content-Digest} header and covered by the signature.
+     *
+     * @param request is the HttpsUrlConnection to which Approov is being added
+     * @param body    is the exact request body that will be written, used for the digest
+     * @throws ApproovException if it is not possible to obtain an Approov token or secure strings
+     */
+    public static synchronized void addApproov(HttpsURLConnection request, byte[] body) throws ApproovException {
+        addApproovInternal(request, false, body);
     }
 
     /**
@@ -1251,12 +1266,13 @@ public class ApproovService {
      *                          secure strings
      */
     public static synchronized HttpsURLConnection addApproovToConnection(HttpsURLConnection request) throws ApproovException {
-        return addApproovInternal(request, true);
+        return addApproovInternal(request, true, null);
     }
 
     private static HttpsURLConnection addApproovInternal(
             HttpsURLConnection request,
-            boolean allowBufferedConnection
+            boolean allowBufferedConnection,
+            byte[] body
     ) throws ApproovException {
         // throw if we couldn't initialize the SDK
         if (!isInitialized)
@@ -1265,6 +1281,12 @@ public class ApproovService {
         // Apply the non-signing parts of the HttpsURLConnection preparation flow immediately so
         // callers continue to see any ApproovException at addApproov() time.
         PreparedRequestData preparedRequestData = prepareApproovRequest(request);
+
+        // Thread explicit body bytes (from addApproov(connection, byte[])) into the mutations
+        // so message signing can compute the Content-Digest over them.
+        if (body != null) {
+            preparedRequestData.changes.setBodyBytes(body);
+        }
 
         // Apply any configured query parameter substitutions before deciding if we
         // can finish processing on the original connection or if we need a wrapper
