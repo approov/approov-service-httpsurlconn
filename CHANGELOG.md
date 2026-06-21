@@ -8,6 +8,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Added
 - Mini-SDK integration test suite (`ApproovServiceMiniSdkTest`, `ApproovNativeSdkTest`) wired against `core-service-layers-testing/mini-sdk`, exercising the TESTING_REQUIREMENTS scenarios.
+- CHANGELOG-vs-tag validation in the publish workflow: a release fails fast if the top `## [x.y.z]` CHANGELOG entry does not match the pushed git tag.
 
 ### Changed
 - **`NO_APPROOV_SERVICE`**: the request now proceeds with an **empty** `Approov-Token` header (and a trace ID if the SDK provides one) as evidence that Approov processing occurred, instead of omitting the headers (root §2 Missing Artifacts Fallback).
