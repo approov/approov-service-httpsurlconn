@@ -113,10 +113,6 @@ public class ApproovService {
     // required prefixes
     private static Map<String, String> substitutionHeaders = null;
 
-    // set of query parameters that may be substituted, specified by the key name
-    // and mapped to the compiled Pattern
-    private static Map<String, Pattern> substitutionQueryParams = null;
-
     // set of URL regexs that should be excluded from any Approov protection, mapped to the compiled Pattern
     private static Map<String, Pattern> exclusionURLRegexs = null;
 
@@ -164,7 +160,6 @@ public class ApproovService {
         approovTokenPrefix = APPROOV_TOKEN_PREFIX;
         bindingHeader = null;
         substitutionHeaders = new HashMap<>();
-        substitutionQueryParams = new HashMap<>();
         exclusionURLRegexs = new HashMap<>();
         serviceMutator = ApproovServiceMutator.DEFAULT;
         isInitialized = true;
@@ -220,7 +215,6 @@ public class ApproovService {
         bindingHeader = null;
         serviceMutator = ApproovServiceMutator.DEFAULT;
         substitutionHeaders = null;
-        substitutionQueryParams = null;
         exclusionURLRegexs = null;
     }
 
@@ -392,49 +386,11 @@ public class ApproovService {
         return new HashMap<>(substitutionHeaders);
     }
 
-    /**
-     * Adds a key name for a query parameter that should be subject to secure
-     * strings substitution. This means that if the query parameter is present in a
-     * URL then the value will be used as a key to look up a secure string value
-     * which will be substituted as the query parameter value instead. This allows
-     * easy migration to the use of secure strings.
-     *
-     * @param key is the query parameter key name to be added for substitution
-     */
-    public static synchronized void addSubstitutionQueryParam(String key) {
-        if (pinningHostnameVerifier != null) {
-            Log.d(TAG, "addSubstitutionQueryParam " + key);
-            try {
-                Pattern pattern = Pattern.compile("[\\?&]" + Pattern.quote(key) + "=([^&;]+)");
-                substitutionQueryParams.put(key, pattern);
-            } catch (PatternSyntaxException e) {
-                Log.e(TAG, "addSubstitutionQueryParam " + key + " error: " + e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * Removes a query parameter key name previously added using
-     * addSubstitutionQueryParam.
-     *
-     * @param key is the query parameter key name to be removed for substitution
-     */
-    public static synchronized void removeSubstitutionQueryParam(String key) {
-        if (pinningHostnameVerifier != null) {
-            Log.d(TAG, "removeSubstitutionQueryParam " + key);
-            substitutionQueryParams.remove(key);
-        }
-    }
-
-    /**
-     * Gets the map of substitution query parameters.
-     *
-     * @return a map of query parameters to be substituted, mapped to the compiled
-     *         Pattern
-     */
-    public static synchronized Map<String, Pattern> getSubstitutionQueryParams() {
-        return new HashMap<>(substitutionQueryParams);
-    }
+    // Automated query-parameter substitution was removed (Issue #14): java.net.URL is
+    // immutable once the connection is opened, and the automated path broke request-mutation
+    // tracking that message signing relies on. Secure-string query values must now be fetched
+    // manually via fetchSecureString() and built into the URL before openConnection().
+    // See USAGE.md ("Substituting Query Parameters").
 
     /**
      * Adds an exclusion URL regular expression. If a URL for a request matches this regular expression
@@ -1154,66 +1110,6 @@ public class ApproovService {
     }
 
     /**
-     * Performs the configured query parameter substitutions for a URL and captures
-     * the mutation metadata needed by the httpsurlconn service layer to keep
-     * request-header and URL substitutions in sync.
-     *
-     * @param url     is the URL being analyzed for substitution
-     * @param mutator is the mutator that decides how substitution results are handled
-     * @return the query substitution result
-     * @throws ApproovException if it is not possible to obtain secure strings for
-     *                          substitution
-     */
-    static synchronized QuerySubstitutionResult substituteQueryParamsDetailed(URL url, ApproovServiceMutator mutator)
-            throws ApproovException {
-        // throw if we couldn't initialize the SDK
-        if (!isInitialized)
-            throw new ApproovException("Approov not initialized");
-
-        if (!isApproovEnabled()) {
-            return new QuerySubstitutionResult(url, url.toString(), Collections.emptyList());
-        }
-
-        // check if the URL matches one of the exclusion regexs and just return if so
-        String originalURL = url.toString();
-        for (Pattern pattern : exclusionURLRegexs.values()) {
-            Matcher matcher = pattern.matcher(originalURL);
-            if (matcher.find())
-                return new QuerySubstitutionResult(url, originalURL, Collections.emptyList());
-        }
-
-        String replacementURL = originalURL;
-        Map<String, Pattern> queryParams = getSubstitutionQueryParams();
-        List<String> queryKeys = new ArrayList<>(queryParams.size());
-        for (Map.Entry<String, Pattern> entry : queryParams.entrySet()) {
-            String queryKey = entry.getKey();
-            Matcher matcher = entry.getValue().matcher(replacementURL);
-            if (matcher.find()) {
-                // we have found an occurrence of the query parameter to be replaced so
-                // we look up the existing value as a key for a secure string
-                String queryValue = matcher.group(1);
-                Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
-                Log.d(TAG, "Substituting query parameter: " + queryKey + ", " + approovResults.getStatus().toString());
-                if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryKey)) {
-                    queryKeys.add(queryKey);
-                    replacementURL = new StringBuilder(replacementURL)
-                            .replace(matcher.start(1), matcher.end(1), approovResults.getSecureString())
-                            .toString();
-                }
-            }
-        }
-
-        if (originalURL.equals(replacementURL))
-            return new QuerySubstitutionResult(url, originalURL, Collections.emptyList());
-
-        try {
-            return new QuerySubstitutionResult(new URL(replacementURL), originalURL, queryKeys);
-        } catch (MalformedURLException e) {
-            throw new ApproovException("Malformed substituted URL: " + e.getMessage());
-        }
-    }
-
-    /**
      * Adds Approov to the given request using the legacy in-place API. The
      * Approov token is added in a header, any optional TraceID debug value is
      * added in a separate header, the HostnameVerifier may be overridden to pin
@@ -1288,33 +1184,17 @@ public class ApproovService {
             preparedRequestData.changes.setBodyBytes(body);
         }
 
-        // Apply any configured query parameter substitutions before deciding if we
-        // can finish processing on the original connection or if we need a wrapper
-        // because the effective URL changed.
-        QuerySubstitutionResult querySubstitutionResult;
-        if (preparedRequestData.invokeProcessedCallback) {
-            querySubstitutionResult = substituteQueryParamsDetailed(request.getURL(), preparedRequestData.mutator);
-        } else {
-            querySubstitutionResult = new QuerySubstitutionResult(
-                    request.getURL(),
-                    request.getURL().toString(),
-                    Collections.emptyList()
-            );
-        }
-
         if (!preparedRequestData.invokeProcessedCallback) {
             return request;
         }
 
+        // Query parameters are never auto-substituted (Issue #14), so the effective URL never
+        // changes here. A buffered connection is still used for body-bearing methods so message
+        // signing can compute the Content-Digest over the body written after addApproov returns.
+        QuerySubstitutionResult querySubstitutionResult = new QuerySubstitutionResult(
+                request.getURL(), request.getURL().toString(), Collections.emptyList());
         if (shouldUseBufferedConnection(request, querySubstitutionResult) && allowBufferedConnection) {
             return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
-        }
-
-        if (querySubstitutionResult.hasEffectiveUrlChange()) {
-            throw new ApproovException(
-                    "Configured query parameter substitution changed the request URL; " +
-                            "use addApproovToConnection(HttpsURLConnection) and continue with the returned connection"
-            );
         }
 
         return preparedRequestData.mutator.handleInterceptorProcessedRequest(
@@ -1323,78 +1203,9 @@ public class ApproovService {
         );
     }
 
-    /**
-     * Applies all configured query parameter substitutions to the supplied URL.
-     * Since this modifies the URL itself it must be done before opening the
-     * HttpsURLConnection. The mutator is consulted for each substitution result so
-     * callers can customize how secure string fetch outcomes are handled.
-     *
-     * @param url is the URL being analyzed for substitution
-     * @return URL passed in, or modified with a new URL if substitutions were made
-     * @throws ApproovException if it is not possible to obtain secure strings for
-     *                          substitution
-     */
-    public static synchronized URL substituteQueryParams(URL url) throws ApproovException {
-        return substituteQueryParamsDetailed(url, getServiceMutator()).url;
-    }
-
-    /**
-     * Substitutes the given query parameter in the URL. If no substitution is made then the
-     * original URL is returned, otherwise a new one is constructed with the revised query
-     * parameter value. Since this modifies the URL itself this must be done before opening the
-     * HttpsURLConnection. If it is not currently possible to fetch secure strings token due to
-     * networking issues then ApproovNetworkException is thrown and a user initiated retry of the
-     * operation should be allowed. ApproovRejectionException may be thrown if the attestation
-     * fails and secure strings cannot be obtained. Other ApproovExecptions represent a more
-     * permanent error condition.
-     *
-     * @param url is the URL being analyzed for substitution
-     * @param queryParameter is the parameter to be potentially substituted
-     * @return URL passed in, or modified with a new URL if required
-     * @throws ApproovException if it is not possible to obtain secure strings for substitution
-     */
-    public static synchronized URL substituteQueryParam(URL url, String queryParameter) throws ApproovException {
-        // throw if we couldn't initialize the SDK
-        if (!isInitialized)
-            throw new ApproovException("Approov not initialized");
-
-        if (!isApproovEnabled()) {
-            return url;
-        }
-
-        // check if the URL matches one of the exclusion regexs and just return if so
-        String urlString = url.toString();
-        for (Pattern pattern: exclusionURLRegexs.values()) {
-            Matcher matcher = pattern.matcher(urlString);
-            if (matcher.find())
-                return url;
-        }
-
-        ApproovServiceMutator mutator = getServiceMutator();
-
-        // perform the query substitution if it is present
-        Pattern pattern = Pattern.compile("[\\?&]" + Pattern.quote(queryParameter) + "=([^&;]+)");
-        Matcher matcher = pattern.matcher(urlString);
-        if (matcher.find()) {
-            // we have found an occurrence of the query parameter to be replaced so we look up the existing
-            // value as a key for a secure string
-            String queryValue = matcher.group(1);
-            Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
-            Log.d(TAG, "Substituting query parameter: " + queryParameter + ", " + approovResults.getStatus().toString());
-            if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryParameter)) {
-                // perform a query substitution
-                try {
-                    return new URL(new StringBuilder(urlString).replace(matcher.start(1),
-                            matcher.end(1), approovResults.getSecureString()).toString());
-                }
-                catch(MalformedURLException e) {
-                    Log.d(TAG, "Substituting query parameter exception: " + e.toString());
-                    return url;
-                }
-            }
-        }
-        return url;
-    }
+    // substituteQueryParams(URL) and substituteQueryParam(URL, String) were removed (Issue #14).
+    // Fetch secure-string query values manually with fetchSecureString() and build the URL before
+    // openConnection(); see USAGE.md ("Substituting Query Parameters").
 }
 
 /**

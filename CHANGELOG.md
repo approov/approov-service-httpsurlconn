@@ -4,6 +4,11 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.5.7] - 2026-06-21
+
+### Removed
+- **Automated query parameter substitution** (`addSubstitutionQueryParam`, `removeSubstitutionQueryParam`, `getSubstitutionQueryParams`, `substituteQueryParams`, `substituteQueryParam`) — Issue #14. `java.net.URL` is immutable once the connection is opened, and the automated path broke the request-mutation tracking that message signing relies on. Fetch secure-string query values with `fetchSecureString()` and build the URL before `openConnection()` (see USAGE.md / REFERENCE.md).
+
 ## [3.5.6] - 2026-05-30
 
 ### Added

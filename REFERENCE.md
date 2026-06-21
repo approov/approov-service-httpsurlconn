@@ -197,29 +197,9 @@ Gets the currently configured substitution headers.
 Map<String, String> getSubstitutionHeaders()
 ```
 
-## addSubstitutionQueryParam
+## Query parameter substitution (removed in 3.5.7)
 
-Adds a query parameter key that should be subject to secure string substitution.
-
-```java
-void addSubstitutionQueryParam(String key)
-```
-
-## removeSubstitutionQueryParam
-
-Removes a query parameter key previously added using `addSubstitutionQueryParam`.
-
-```java
-void removeSubstitutionQueryParam(String key)
-```
-
-## getSubstitutionQueryParams
-
-Gets the currently configured substitution query parameters.
-
-```java
-Map<String, Pattern> getSubstitutionQueryParams()
-```
+Automated query parameter substitution — `addSubstitutionQueryParam`, `removeSubstitutionQueryParam`, `getSubstitutionQueryParams`, `substituteQueryParams`, and `substituteQueryParam` — was **removed** (Issue #14). `java.net.URL` is immutable once the connection is opened, and the automated path broke the request-mutation tracking that message signing relies on. To use an Approov secure string as a query value, fetch it with `fetchSecureString()` and build the URL before `openConnection()` — see USAGE.md.
 
 ## addExclusionURLRegex
 
@@ -359,24 +339,4 @@ Prepares an `HttpsURLConnection` request and returns the connection reference th
 HttpsURLConnection addApproovToConnection(HttpsURLConnection request) throws ApproovException
 ```
 
-In the common case this is the same instance that was passed in. If configured query substitutions change the effective URL, or if deferred body-aware processing is required, then a wrapped connection is returned instead.
-
-## substituteQueryParams
-
-Applies all configured query parameter substitutions to the supplied URL.
-
-```java
-URL substituteQueryParams(URL url) throws ApproovException
-```
-
-Since this modifies the URL itself, it must be done before opening the `HttpsURLConnection`.
-
-## substituteQueryParam
-
-Substitutes a single query parameter in the supplied URL.
-
-```java
-URL substituteQueryParam(URL url, String queryParameter) throws ApproovException
-```
-
-Since this modifies the URL itself, it must be done before opening the `HttpsURLConnection`.
+In the common case this is the same instance that was passed in. A wrapped connection is returned only when deferred body-aware processing is required (a message-signing body digest on a body-bearing request).

@@ -119,16 +119,20 @@ connection.setRequestMethod("GET");
 connection = ApproovService.addApproovToConnection(connection);
 ```
 
-You should always continue using the returned connection reference. In the common case this is the same instance that you passed in. If configured query substitutions change the effective URL then a wrapped connection is returned.
+You should always continue using the returned connection reference. In the common case this is the same instance that you passed in; a wrapped connection is returned only when deferred body-aware processing (a message-signing body digest) is required.
 
-If you need to substitute configured query parameters before opening the connection, you can do so explicitly:
+### Substituting query parameters
+
+Automated query parameter substitution was removed (Issue #14): `java.net.URL` is immutable once the connection is opened. To use an Approov secure string as a query value, fetch it manually and build the URL **before** opening the connection:
 
 ```java
-URL url = new URL("https://api.example.com/shapes?api_key=shapes-key");
-URL substitutedUrl = ApproovService.substituteQueryParams(url);
-HttpsURLConnection connection = (HttpsURLConnection) substitutedUrl.openConnection();
+String secret = ApproovService.fetchSecureString("my_api_key_name", null);
+URL url = new URL("https://api.example.com/shapes?api_key=" + secret);
+HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 connection = ApproovService.addApproovToConnection(connection);
 ```
+
+> **Note:** the secure string is used exactly as returned by Approov — it is **not** URL-encoded for you. If it can contain reserved characters (`&`, `=`, `#`, spaces, …), URL-encode it (or ensure it is encoded when added via the Approov CLI) to avoid mangling the query string.
 
 ## Message signing
 

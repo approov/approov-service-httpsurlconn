@@ -112,37 +112,6 @@ public class ApproovServiceTest {
     }
 
     @Test
-    public void addApproovReturnsWrappedConnectionWhenQuerySubstitutionChangesUrl() throws Exception {
-        String requestUrl = "https://example.com/shapes?api_key=old-key";
-        String substitutedUrl = "https://example.com/shapes?api_key=replaced-key";
-
-        Approov.TokenFetchResult tokenResult = mockTokenFetchResult(
-                Approov.TokenFetchStatus.SUCCESS,
-                "approov-token-value",
-                null
-        );
-        Approov.TokenFetchResult secureStringResult = mockTokenFetchResult(
-                Approov.TokenFetchStatus.SUCCESS,
-                null,
-                "replaced-key"
-        );
-
-        mockApproov.when(() -> Approov.fetchApproovTokenAndWait(requestUrl)).thenReturn(tokenResult);
-        mockApproov.when(() -> Approov.fetchSecureStringAndWait("old-key", null)).thenReturn(secureStringResult);
-
-        ApproovService.addSubstitutionQueryParam("api_key");
-
-        HttpsURLConnection request = newConnection(requestUrl);
-        request.setRequestMethod("GET");
-
-        HttpsURLConnection returned = ApproovService.addApproovToConnection(request);
-
-        assertNotSame(request, returned);
-        assertTrue(returned instanceof ApproovBufferedHttpsURLConnection);
-        assertEquals(substitutedUrl, returned.getURL().toString());
-    }
-
-    @Test
     public void addApproovUsesStatusAsTokenHeaderWhenConfigured() throws Exception {
         String requestUrl = "https://example.com/shapes";
         Approov.TokenFetchResult tokenResult = mockTokenFetchResult(
@@ -162,21 +131,6 @@ public class ApproovServiceTest {
         assertEquals("NO_NETWORK", request.getRequestProperty("Approov-Token"));
     }
 
-    @Test
-    public void substituteQueryParamsReplacesConfiguredValues() throws Exception {
-        String requestUrl = "https://example.com/shapes?api_key=old-key";
-        Approov.TokenFetchResult secureStringResult = mockTokenFetchResult(
-                Approov.TokenFetchStatus.SUCCESS,
-                null,
-                "replaced-key"
-        );
-        mockApproov.when(() -> Approov.fetchSecureStringAndWait("old-key", null)).thenReturn(secureStringResult);
-        ApproovService.addSubstitutionQueryParam("api_key");
-
-        URL substituted = ApproovService.substituteQueryParams(new URL(requestUrl));
-
-        assertEquals("https://example.com/shapes?api_key=replaced-key", substituted.toString());
-    }
 
     private static HttpsURLConnection newConnection(String url) throws Exception {
         return (HttpsURLConnection) new URL(url).openConnection();
