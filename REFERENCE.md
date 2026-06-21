@@ -329,7 +329,17 @@ Prepares an `HttpsURLConnection` request in place by adding the Approov token he
 void addApproov(HttpsURLConnection request) throws ApproovException
 ```
 
-This preserves the original binary-compatible API. Use `addApproovToConnection(...)` for query parameter substitution or deferred body-aware processing.
+This preserves the original binary-compatible API. Use `addApproovToConnection(...)` when deferred body-aware processing may be required (a message-signing body digest on a body-bearing request).
+
+## addApproov (with body bytes)
+
+Prepares the request and additionally supplies the request body so a message-signing `Content-Digest` can be computed over it. Use this when message signing is configured with a body digest and the body is available as a repeatable byte array. The SHA-256 (or SHA-512) digest of `body` is set in the `Content-Digest` header and covered by the signature.
+
+```java
+void addApproov(HttpsURLConnection request, byte[] body) throws ApproovException
+```
+
+If a body digest is configured as **required** and cannot be generated, this fails closed with an `ApproovException`.
 
 ## addApproovToConnection
 

@@ -183,6 +183,24 @@ SDK can generate account signatures. See the Approov CLI documentation for the
 
 To disable signing, remove the signer using `setServiceMutator(null)`, or return `null` from your factory for hosts you want to skip.
 
+### Signing over the request body (Content-Digest)
+
+To cover the request body with the signature, configure a body digest on the factory and pass the body bytes to the `addApproov(connection, byte[])` overload — `HttpsURLConnection` does not expose the body for digesting otherwise:
+
+```java
+factory.setBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA256, false); // required=false
+
+byte[] body = jsonPayload.getBytes(StandardCharsets.UTF_8);
+HttpsURLConnection connection = (HttpsURLConnection) new URL(url).openConnection();
+connection.setRequestMethod("POST");
+ApproovService.addApproov(connection, body);   // computes Content-Digest over body
+try (OutputStream os = connection.getOutputStream()) {
+    os.write(body);                              // write the SAME bytes
+}
+```
+
+With `required = false` (the default) the request is signed without a `Content-Digest` if the body is unavailable. With `required = true` a body that cannot be digested fails closed with an `ApproovException`.
+
 ## Token binding
 
 [Token Binding](https://ext.approov.io/docs/latest/approov-usage-documentation/#token-binding) allows you to bind the Approov token to a specific piece of data, such as an OAuth token or user session identifier. The `ApproovService` calculates a hash of the binding data locally and includes this hash in the Approov token claims. The actual binding data is never sent to the Approov cloud service; only the hash is transmitted.
