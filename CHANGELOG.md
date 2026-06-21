@@ -10,6 +10,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Tightened SDK initialization: service-layer state is now only reset and committed after the native SDK confirms success, preserving the prior operating mode (protected or bypass) if initialization fails.
 - `null` config now throws `IllegalArgumentException` instead of being silently coerced to bypass mode; pass `""` explicitly for bypass.
 
+### Fixed
+- **Message-signing fail-open conformance** (core issue #564): the account-signature branch, base64 decode, and ASN.1/DER ES256 decode now **fail open** (proceed unsigned, logged at error level) instead of aborting the request. Only a required body digest that cannot be generated and an unsupported signing algorithm still fail closed. The backend remains the enforcement point for signatures.
+
 ---
 
 ## [3.5.5] - 2026-05-22

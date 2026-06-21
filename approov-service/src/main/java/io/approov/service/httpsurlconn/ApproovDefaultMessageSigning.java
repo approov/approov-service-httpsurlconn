@@ -243,14 +243,19 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 try {
                     base64 = getInstallMessageSignature(message);
                 } catch (ApproovException e) {
-                    Log.d(TAG, "Failed to get InstallMessageSignature - skipping message signing " + e);
+                    Log.e(TAG, "Failed to get InstallMessageSignature - proceeding unsigned " + e);
                     return request;
                 }
                 if (base64.isEmpty()) {
-                    Log.d(TAG, "InstallMessageSignature is empty - skipping message signing");
+                    Log.e(TAG, "InstallMessageSignature is empty - proceeding unsigned");
                     return request;
                 }
-                signature = decodeBase64(base64);
+                try {
+                    signature = decodeBase64(base64);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
+                    return request;
+                }
                 // decode the signature from ASN.1 DER format
                 try (ASN1InputStream asn1InputStream = new ASN1InputStream(signature)) {
                     ASN1Sequence sequence = (ASN1Sequence) asn1InputStream.readObject();
@@ -262,20 +267,38 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                         System.arraycopy(rBytes, 0, signature, 0, rBytes.length);
                         System.arraycopy(sBytes, 0, signature, rBytes.length, sBytes.length);
                     } else {
-                        throw new IllegalStateException("Not an ASN1Sequence");
+                        Log.e(TAG, "Not an ASN1Sequence - proceeding unsigned");
+                        return request;
                     }
                 } catch (Exception e) {
-                    throw new IllegalStateException("Failed to decode ASN.1 DER ES256 signature", e);
+                    Log.e(TAG, "Failed to decode ASN.1 DER ES256 signature - proceeding unsigned", e);
+                    return request;
                 }
                 break;
             }
             case ALG_HS256: {
                 sigId = "account";
-                String base64 = getAccountMessageSignature(message);
-                signature = decodeBase64(base64);
+                String base64;
+                try {
+                    base64 = getAccountMessageSignature(message);
+                } catch (ApproovException e) {
+                    Log.e(TAG, "Failed to get AccountMessageSignature - proceeding unsigned " + e);
+                    return request;
+                }
+                if (base64.isEmpty()) {
+                    Log.e(TAG, "AccountMessageSignature is empty - proceeding unsigned");
+                    return request;
+                }
+                try {
+                    signature = decodeBase64(base64);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
+                    return request;
+                }
                 break;
             }
             default:
+                // Unsupported algorithm is a misconfiguration — fail CLOSED (abort the request).
                 throw new IllegalStateException("Unsupported algorithm identifier: " + params.getAlg());
         }
 
