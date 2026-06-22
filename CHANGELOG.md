@@ -17,6 +17,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - **Automated query parameter substitution** (`addSubstitutionQueryParam`, `removeSubstitutionQueryParam`, `getSubstitutionQueryParams`, `substituteQueryParams`, `substituteQueryParam`) — Issue #14. `java.net.URL` is immutable once the connection is opened, and the automated path broke the request-mutation tracking that message signing relies on. Fetch secure-string query values with `fetchSecureString()` and build the URL before `openConnection()` (see USAGE.md / REFERENCE.md).
 
 ### Fixed
+- Message signing: a signature-base build failure and a `Signature`/`Signature-Input` serialization failure now fail open (log at error, proceed unsigned) for full conformance with the cross-layer fail-open policy (core-project-approov#564); a required body digest and an unsupported algorithm remain fail-closed.
 - A **required** body digest that cannot be generated now fails closed via `ApproovException` (the documented `addApproov` contract) rather than a raw `IllegalStateException`.
 - **Empty config after a valid config is now ignored** (§1) — it no longer resets state / downgrades a protected layer to bypass. Approov protection remains active under the original config and the empty call is not forwarded to the SDK.
 - `setApproovHeader(header, null)` no longer prepends the literal string `"null"` to the token — a `null` prefix is treated as no prefix (§2 Custom Header Prefixes).

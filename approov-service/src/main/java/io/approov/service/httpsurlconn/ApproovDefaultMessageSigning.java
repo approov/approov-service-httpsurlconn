@@ -236,9 +236,15 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             return request;
         }
 
-        // Apply the params to get the message
+        // Apply the params to get the message. A failure here is fail-open (proceed unsigned + log).
         SignatureBaseBuilder baseBuilder = new SignatureBaseBuilder(params, provider);
-        String message = baseBuilder.createSignatureBase();
+        String message;
+        try {
+            message = baseBuilder.createSignatureBase();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to build the signature base - proceeding unsigned " + e);
+            return request;
+        }
         // WARNING never log the message as it contains an Approov token which provides access to your API.
 
         // Generate the signature
@@ -310,23 +316,29 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 throw new IllegalStateException("Unsupported algorithm identifier: " + params.getAlg());
         }
 
-        // Calculate the signature and message descriptor headers.
-        Map<String, ListElement<?>> sigMap = new LinkedHashMap<>();
-        sigMap.put(sigId, ByteSequenceItem.valueOf(signature));
-        String sigHeader = Dictionary.valueOf(sigMap).serialize();
-        Map<String, ListElement<?>> sigInputMap = new LinkedHashMap<>();
-        sigInputMap.put(sigId, params.toComponentValue());
-        String sigInputHeader = Dictionary.valueOf(sigInputMap).serialize();
+        // Calculate the signature and message descriptor headers. Serialization failure is
+        // fail-open: proceed unsigned and log at error rather than aborting the request.
+        try {
+            Map<String, ListElement<?>> sigMap = new LinkedHashMap<>();
+            sigMap.put(sigId, ByteSequenceItem.valueOf(signature));
+            String sigHeader = Dictionary.valueOf(sigMap).serialize();
+            Map<String, ListElement<?>> sigInputMap = new LinkedHashMap<>();
+            sigInputMap.put(sigId, params.toComponentValue());
+            String sigInputHeader = Dictionary.valueOf(sigInputMap).serialize();
 
-        // HttpURLConnection doesn't have a removeHeader function, so we use
-        // setRequestProperty to replace any previous values and avoid accumulating
-        // duplicate signature headers across retries or repeated processing.
-        request.setRequestProperty("Signature", sigHeader);
-        request.setRequestProperty("Signature-Input", sigInputHeader);
+            // HttpURLConnection doesn't have a removeHeader function, so we use
+            // setRequestProperty to replace any previous values and avoid accumulating
+            // duplicate signature headers across retries or repeated processing.
+            request.setRequestProperty("Signature", sigHeader);
+            request.setRequestProperty("Signature-Input", sigInputHeader);
 
-        Log.d(TAG, "Constructed Signature header: " + sigHeader);
-        Log.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
-        Log.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
+            Log.d(TAG, "Constructed Signature header: " + sigHeader);
+            Log.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
+            Log.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to serialize signature headers - proceeding unsigned " + e);
+            return request;
+        }
 
         // Debugging - log the message and signature-related headers
         // WARNING never log the message in production code as it contains the Approov token which allows API access
