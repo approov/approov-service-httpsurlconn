@@ -1115,9 +1115,8 @@ public class ApproovService {
      * the request, and configured secure string header substitutions are applied.
      *
      * This method preserves the binary-compatible API from earlier releases. Use
-     * addApproovToConnection(HttpsURLConnection) when configured query
-     * substitutions may change the effective URL or when the caller needs
-     * deferred body-aware processing such as message-signing body digests.
+     * addApproovToConnection(HttpsURLConnection) when the caller needs deferred
+     * body-aware processing such as message-signing body digests.
      *
      * @param request is the HttpsUrlConnection to which Approov is being added
      * @throws ApproovException if it is not possible to obtain an Approov token or
@@ -1153,8 +1152,7 @@ public class ApproovService {
      * @param request is the HttpsUrlConnection to which Approov is being added
      * @return the processed request, ready to be used by the caller. In the
      *         common case this is the same connection instance that was passed in.
-     *         If configured query substitutions change the target URL, or if
-     *         deferred body-aware processing is required, then a wrapped
+     *         If deferred body-aware processing is required, a buffered wrapper
      *         connection is returned and the caller must continue to use that
      *         returned instance.
      * @throws ApproovException if it is not possible to obtain an Approov token or
