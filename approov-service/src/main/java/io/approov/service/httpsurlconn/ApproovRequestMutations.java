@@ -92,7 +92,7 @@ public class ApproovRequestMutations {
      * @return the request body bytes, or null if none were supplied
      */
     public byte[] getBodyBytes() {
-        return bodyBytes;
+        return (bodyBytes == null) ? null : bodyBytes.clone();
     }
 
     /**
@@ -101,6 +101,6 @@ public class ApproovRequestMutations {
      * @param bodyBytes the request body bytes
      */
     public void setBodyBytes(byte[] bodyBytes) {
-        this.bodyBytes = bodyBytes;
+        this.bodyBytes = (bodyBytes == null) ? null : bodyBytes.clone();
     }
 }

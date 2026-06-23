@@ -17,18 +17,19 @@ public class ApproovNativeSdkTest {
     @Test
     public void testApproovInit() {
         Context context = ApplicationProvider.getApplicationContext();
+
+        // First init should succeed.
         Approov.initialize(context, config, "auto", null);
-        try {
-            Approov.initialize(context, config, "auto", null);
-            System.out.println("NATIVE_SDK: Same config allowed");
-        } catch (Exception e) {
-            System.out.println("NATIVE_SDK: Same config threw " + e.getClass().getName() + ": " + e.getMessage());
-        }
+
+        // Same config should be allowed.
+        Approov.initialize(context, config, "auto", null);
+
+        // Different config should be rejected.
         try {
             Approov.initialize(context, config2, "auto", null);
-            System.out.println("NATIVE_SDK: Diff config allowed");
-        } catch (Exception e) {
-            System.out.println("NATIVE_SDK: Diff config threw " + e.getClass().getName() + ": " + e.getMessage());
+            org.junit.Assert.fail("Expected IllegalStateException when initializing with a different config");
+        } catch (IllegalStateException expected) {
+            // expected
         }
     }
 }

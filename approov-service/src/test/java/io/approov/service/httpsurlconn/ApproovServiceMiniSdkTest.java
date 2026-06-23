@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider;
 import com.criticalblue.minisdk.testing.AttesterProxyController;
 import javax.net.ssl.HttpsURLConnection;
 import java.net.URL;
-import java.net.HttpURLConnection;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
@@ -34,8 +33,7 @@ import com.criticalblue.approovsdk.Approov;
 import static org.junit.Assert.*;
 
 /**
- * Integration tests for the ApproovService OkHttp service layer.
- *
+ * Integration tests for the ApproovService HttpsURLConnection service layer.
  * Tests are organized to match the sections defined in TESTING_REQUIREMENTS.md
  * from the core-service-layers-testing repository. Each test includes a comment
  * referencing the requirement(s) it covers.
@@ -52,8 +50,7 @@ public class ApproovServiceMiniSdkTest {
     public void setUp() {
         context = ApplicationProvider.getApplicationContext();
         AttesterProxyController.reset();
-        ApproovService.initialize(context, validInitialConfig, "reinit-okhttp-tests");
-    }
+        ApproovService.initialize(context, validInitialConfig, "reinit-httpsurlconn-tests");
  
     @After
     public void tearDown() {
@@ -1084,14 +1081,8 @@ public class ApproovServiceMiniSdkTest {
     // NEW TESTS to cover gaps from ISSUES.md
     // ==================================================================================
 
-    private void resetApproovServiceState() throws Exception {
-        java.lang.reflect.Field isInitField = ApproovService.class.getDeclaredField("isInitialized");
-        isInitField.setAccessible(true);
-        isInitField.set(null, false);
-        
-        java.lang.reflect.Field configField = ApproovService.class.getDeclaredField("configString");
-        configField.setAccessible(true);
-        configField.set(null, null);
+    private void resetApproovServiceState() {
+        ApproovService.reset();
     }
 
     /**

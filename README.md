@@ -1,7 +1,7 @@
 # Approov Service for HttpsURLConnection
 
 ![Java](https://img.shields.io/badge/Java-8%2B-007396?logo=openjdk&logoColor=white)
-![Android](https://img.shields.io/badge/Android-minSdk%2021-3DDC84?logo=android&logoColor=white)
+![Android](https://img.shields.io/badge/Android-minSdk%2023-3DDC84?logo=android&logoColor=white)
 ![Maven Central](https://img.shields.io/maven-central/v/io.approov/service.httpsurlconn?logo=apachemaven&logoColor=white&label=Maven%20Central)
 ![Message Signing](https://img.shields.io/badge/Message%20Signing-RFC%209421-1f6feb)
 ![Build](https://github.com/approov/approov-service-httpsurlconn/actions/workflows/build_only.yml/badge.svg)
@@ -32,7 +32,7 @@ The following app permissions need to be available in the manifest to use Approo
 <uses-permission android:name="android.permission.INTERNET" />
 ```
 
-Note that the minimum SDK version you can use with the Approov package is 21 (Android 5.0). 
+Note that the minimum SDK version you can use with the Approov package is 23 (Android 6.0).
 
 Please [read this](https://approov.io/docs/latest/approov-usage-documentation/#targeting-android-11-and-above) section of the reference documentation if targeting Android 11 (API level 30) or above.
 
