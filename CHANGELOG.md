@@ -9,6 +9,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Added
 - Mini-SDK integration test suite (`ApproovServiceMiniSdkTest`, `ApproovNativeSdkTest`) wired against `core-service-layers-testing/mini-sdk`, exercising the TESTING_REQUIREMENTS scenarios.
 - CHANGELOG-vs-tag validation in the publish workflow: a release fails fast if the top `## [x.y.z]` CHANGELOG entry does not match the pushed git tag.
+- The runtime Approov user-property now reports the service-layer version (`approov-service-httpsurlconn/<version>`): a `BuildConfig.APPROOV_SERVICE_VERSION` field (default `dev`) is baked from `-PapproovServiceVersion`, the Maven publish workflow passes the release tag (`-PapproovServiceVersion=${{ github.ref_name }}`), and `setUserProperty` appends it. Previously a bare, version-less string was reported.
 
 ### Changed
 - **`NO_APPROOV_SERVICE`**: the request now proceeds with an **empty** `Approov-Token` header (and a trace ID if the SDK provides one) as evidence that Approov processing occurred, instead of omitting the headers (root §2 Missing Artifacts Fallback).

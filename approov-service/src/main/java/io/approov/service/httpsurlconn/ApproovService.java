@@ -175,7 +175,7 @@ public class ApproovService {
         configString = config;
         if (isApproovEnabled()) {
             pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
-            Approov.setUserProperty("approov-service-httpsurlconn");
+            Approov.setUserProperty("approov-service-httpsurlconn/" + BuildConfig.APPROOV_SERVICE_VERSION);
         }
     }
 

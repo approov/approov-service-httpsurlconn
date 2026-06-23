@@ -15,10 +15,23 @@ android {
     namespace = 'io.approov.service.httpsurlconn'
     compileSdkVersion 30
 
+    buildFeatures {
+        // AGP 8 disables BuildConfig generation by default; enable it so the service-layer
+        // version can be exposed to runtime code (see APPROOV_SERVICE_VERSION below).
+        buildConfig true
+    }
+
     defaultConfig {
         minSdkVersion 23
         targetSdkVersion 34
         consumerProguardFiles 'consumer-rules.pro'
+
+        // The published service-layer version, fed by CI from the release git tag
+        // (-PapproovServiceVersion=X.Y.Z). Local/test builds get "dev". This is the single
+        // source of truth for the version baked into the compiled AAR and reported via
+        // Approov.setUserProperty.
+        def serviceVersion = (project.findProperty('approovServiceVersion') ?: 'dev')
+        buildConfigField "String", "APPROOV_SERVICE_VERSION", "\"${serviceVersion}\""
     }
 
     buildTypes {

@@ -86,8 +86,10 @@ jobs:
         KEY_ID=$(gpg --list-keys --with-colons | grep pub | cut -d: -f5)
         echo -e "trust\n5\ny\nquit" | gpg --batch --yes --command-fd 0 --edit-key $KEY_ID
     
+    # Inject the release version (the git tag) so the published AAR bakes the correct
+    # BuildConfig.APPROOV_SERVICE_VERSION (reported via Approov.setUserProperty) instead of "dev".
     - name: Build AAR
-      run:  ./gradlew assembleRelease
+      run:  ./gradlew assembleRelease -PapproovServiceVersion=${{ github.ref_name }}
 
     - name: Create Package
       run: cd .maven && ./build-and-sign.sh
