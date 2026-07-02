@@ -51,7 +51,8 @@ public class ApproovServiceMiniSdkTest {
         context = ApplicationProvider.getApplicationContext();
         AttesterProxyController.reset();
         ApproovService.initialize(context, validInitialConfig, "reinit-httpsurlconn-tests");
- 
+    }
+
     @After
     public void tearDown() {
         ApproovService.setServiceMutator(ApproovServiceMutator.DEFAULT);
