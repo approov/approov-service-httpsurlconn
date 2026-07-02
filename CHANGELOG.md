@@ -13,6 +13,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Full `build_and_test.yml` CI (mini-SDK harness: builds the AAR and runs the unit + mini-SDK integration tests on push to `main` and on PRs), plus automatic release tagging gated behind it (`tag-release` job): once tests pass, the top CHANGELOG entry drives a matching git tag, which triggers the Maven publish workflow. Skipped if the tag already exists.
 
 ### Changed
+- Android build migrated from the unmaintained `com.github.johnrengelman.shadow` 8.1.1 plugin to the maintained fork `com.gradleup.shadow` 8.3.11 for Gradle 9 compatibility (Gradle 9 removed `FileCopyDetails.mode`, making the old plugin fail with a `MissingPropertyException`). Shaded BouncyCastle jar verified byte-identical; minimum supported Gradle remains 8.3.
+- Removed the defunct `jcenter()` repository from the root build — JCenter is shut down and the `jcenter()` method is removed in Gradle 9.
 - **`NO_APPROOV_SERVICE`**: the request now proceeds with an **empty** `Approov-Token` header (and a trace ID if the SDK provides one) as evidence that Approov processing occurred, instead of omitting the headers (root §2 Missing Artifacts Fallback).
 
 ### Removed
