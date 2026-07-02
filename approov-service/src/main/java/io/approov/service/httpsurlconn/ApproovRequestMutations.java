@@ -26,9 +26,8 @@ import java.util.List;
 public class ApproovRequestMutations {
     private String tokenHeaderKey;
     private List<String> substitutionHeaderKeys;
-    private String originalURL;
-    private List<String> substitutionQueryParamKeys;
     private String traceIDHeaderKey;
+    private byte[] bodyBytes;
 
 
     /**
@@ -67,34 +66,6 @@ public class ApproovRequestMutations {
         this.substitutionHeaderKeys = substitutionHeaderKeys;
     }
 
-    /**
-     * Gets the original URL before any query parameter substitutions.
-     *
-     * @return the original URL
-     */
-    public String getOriginalURL() {
-        return originalURL;
-    }
-
-    /**
-     * Gets the list of query parameter keys that were substituted with secure strings.
-     *
-     * @return the list of substituted query parameter keys
-     */
-    public List<String> getSubstitutionQueryParamKeys() {
-        return substitutionQueryParamKeys;
-    }
-
-    /**
-     * Sets the results of query parameter substitutions, including the original URL and the keys of substituted parameters.
-     *
-     * @param originalURL the original URL before substitutions
-     * @param substitutionQueryParamKeys the list of substituted query parameter keys
-     */
-    public void setSubstitutionQueryParamResults(String originalURL, List<String> substitutionQueryParamKeys) {
-        this.originalURL = originalURL;
-        this.substitutionQueryParamKeys = substitutionQueryParamKeys;
-    }
 
     /**
      * Gets the header key used for the optional Approov TraceID debug header.
@@ -112,5 +83,24 @@ public class ApproovRequestMutations {
      */
     public void setTraceIDHeaderKey(String traceIDHeaderKey) {
         this.traceIDHeaderKey = traceIDHeaderKey;
+    }
+
+    /**
+     * Gets the request body bytes supplied via the {@code addApproov(connection, byte[])}
+     * overload, used to compute the message-signing {@code Content-Digest}.
+     *
+     * @return the request body bytes, or null if none were supplied
+     */
+    public byte[] getBodyBytes() {
+        return (bodyBytes == null) ? null : bodyBytes.clone();
+    }
+
+    /**
+     * Sets the request body bytes used to compute the message-signing {@code Content-Digest}.
+     *
+     * @param bodyBytes the request body bytes
+     */
+    public void setBodyBytes(byte[] bodyBytes) {
+        this.bodyBytes = (bodyBytes == null) ? null : bodyBytes.clone();
     }
 }

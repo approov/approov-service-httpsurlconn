@@ -15,13 +15,39 @@ If a method throws an `ApproovRejectionException`, the app failed attestation. A
 
 ## initialize
 
-Initializes the Approov SDK and enables the Approov features.
+Initializes the Approov SDK and enables the Approov features. The `config` will have been provided in the initial onboarding or email or can be obtained using the approov CLI. A second attempt to initialize with a different `config` (without using the reinitialization comment) is forwarded to the native SDK, which throws an `IllegalStateException` that this method surfaces unchanged.
 
+**Java:**
 ```java
 void initialize(Context context, String config)
 ```
 
-The application context must be provided using the `context` parameter. It is possible to pass an empty `config` string to indicate that no initialization is required. Only do this if you are also using a different Approov service layer in your app and that layer initializes the shared SDK first.
+**Kotlin:**
+```kotlin
+fun initialize(context: Context, config: String)
+```
+
+The application context must be provided using the `context` parameter.
+
+It is possible to pass an empty `config` string to indicate that no initialization of the underlying native Approov SDK is required. This initializes the service layer in a bypass mode, allowing you to obtain standard, non-Approov protected connections. If you attempt to use any direct native Approov SDK functions (such as `fetchToken` or `precheck`) while bypassed, an `ApproovException` will be thrown. You may later call `initialize` again with a valid `config` string to enable Approov protection for connections obtained after that point.
+
+An alternative initialization function allows you to provide further options or trigger reinitialization in the `comment` parameter. Please refer to the [Approov SDK documentation](https://approov.io/docs/latest/approov-direct-sdk-integration/#sdk-initialization-options) for details.
+
+**Throws** (both are unchecked and propagate directly; the service-layer state is left unchanged on failure):
+- `IllegalArgumentException` — if `config` is `null`. Pass `""` for bypass mode.
+- `IllegalStateException` — if the native SDK rejects the configuration, e.g. a different non-empty `config` than the one already initialized (an empty `config` after a valid one is ignored, not an error).
+
+**Java:**
+```java
+void initialize(Context context, String config, String comment)
+```
+
+**Kotlin:**
+```kotlin
+fun initialize(context: Context, config: String, comment: String)
+```
+
+For example, options like `options:no-install-key` or reinitialization via `reinit` can be supplied via the `comment` parameter.
 
 ## setServiceMutator
 
@@ -175,29 +201,9 @@ Gets the currently configured substitution headers.
 Map<String, String> getSubstitutionHeaders()
 ```
 
-## addSubstitutionQueryParam
+## Query parameter substitution (removed in 3.5.7)
 
-Adds a query parameter key that should be subject to secure string substitution.
-
-```java
-void addSubstitutionQueryParam(String key)
-```
-
-## removeSubstitutionQueryParam
-
-Removes a query parameter key previously added using `addSubstitutionQueryParam`.
-
-```java
-void removeSubstitutionQueryParam(String key)
-```
-
-## getSubstitutionQueryParams
-
-Gets the currently configured substitution query parameters.
-
-```java
-Map<String, Pattern> getSubstitutionQueryParams()
-```
+Automated query parameter substitution — `addSubstitutionQueryParam`, `removeSubstitutionQueryParam`, `getSubstitutionQueryParams`, `substituteQueryParams`, and `substituteQueryParam` — was **removed** (Issue #14). `java.net.URL` is immutable once the connection is opened, and the automated path broke the request-mutation tracking that message signing relies on. To use an Approov secure string as a query value, fetch it with `fetchSecureString()` and build the URL before `openConnection()` — see USAGE.md.
 
 ## addExclusionURLRegex
 
@@ -327,7 +333,17 @@ Prepares an `HttpsURLConnection` request in place by adding the Approov token he
 void addApproov(HttpsURLConnection request) throws ApproovException
 ```
 
-This preserves the original binary-compatible API. Use `addApproovToConnection(...)` for query parameter substitution or deferred body-aware processing.
+This preserves the original binary-compatible API. Use `addApproovToConnection(...)` when deferred body-aware processing may be required (a message-signing body digest on a body-bearing request).
+
+## addApproov (with body bytes)
+
+Prepares the request and additionally supplies the request body so a message-signing `Content-Digest` can be computed over it. Use this when message signing is configured with a body digest and the body is available as a repeatable byte array. The SHA-256 (or SHA-512) digest of `body` is set in the `Content-Digest` header and covered by the signature.
+
+```java
+void addApproov(HttpsURLConnection request, byte[] body) throws ApproovException
+```
+
+If a body digest is configured as **required** and cannot be generated, this fails closed with an `ApproovException`.
 
 ## addApproovToConnection
 
@@ -337,24 +353,4 @@ Prepares an `HttpsURLConnection` request and returns the connection reference th
 HttpsURLConnection addApproovToConnection(HttpsURLConnection request) throws ApproovException
 ```
 
-In the common case this is the same instance that was passed in. If configured query substitutions change the effective URL, or if deferred body-aware processing is required, then a wrapped connection is returned instead.
-
-## substituteQueryParams
-
-Applies all configured query parameter substitutions to the supplied URL.
-
-```java
-URL substituteQueryParams(URL url) throws ApproovException
-```
-
-Since this modifies the URL itself, it must be done before opening the `HttpsURLConnection`.
-
-## substituteQueryParam
-
-Substitutes a single query parameter in the supplied URL.
-
-```java
-URL substituteQueryParam(URL url, String queryParameter) throws ApproovException
-```
-
-Since this modifies the URL itself, it must be done before opening the `HttpsURLConnection`.
+In the common case this is the same instance that was passed in. A wrapped connection is returned only when deferred body-aware processing is required (a message-signing body digest on a body-bearing request).

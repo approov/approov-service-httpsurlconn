@@ -76,6 +76,12 @@ public class ApproovService {
     // hostname verifier that checks against the current Approov pins or null if SDK not initialized
     private static PinningHostnameVerifier pinningHostnameVerifier = null;
 
+    // true if the ApproovService has been initialized
+    private static boolean isInitialized = false;
+
+    // the configuration string used to initialize the Approov SDK
+    private static String configString = null;
+
     // true if request preparation should proceed on network failures and not add
     // an Approov token
     private static boolean proceedOnNetworkFail = false;
@@ -107,10 +113,6 @@ public class ApproovService {
     // required prefixes
     private static Map<String, String> substitutionHeaders = null;
 
-    // set of query parameters that may be substituted, specified by the key name
-    // and mapped to the compiled Pattern
-    private static Map<String, Pattern> substitutionQueryParams = null;
-
     // set of URL regexs that should be excluded from any Approov protection, mapped to the compiled Pattern
     private static Map<String, Pattern> exclusionURLRegexs = null;
 
@@ -121,13 +123,44 @@ public class ApproovService {
     }
 
     /**
-     * Initializes the ApproovService with an account configuration.
+     * Initializes the ApproovService with an account configuration and comment.
      *
      * @param context the Application context
      * @param config the configuration string, or empty for no SDK initialization
+     * @param comment the comment string, or empty/null for default comment ("auto" is used by native SDK)
      */
-    public static void initialize(Context context, String config) {
-        // setup for using Appproov
+    public static synchronized void initialize(Context context, String config, String comment) {
+        if (config == null)
+            throw new IllegalArgumentException("config must not be null; pass \"\" for bypass mode");
+
+        // If already initialized with a valid (non-empty) config, ignore a later empty-config
+        // call: the existing Approov protection must remain active and the call must not be
+        // forwarded to the SDK or reset any service-layer state (TESTING_REQUIREMENTS §1,
+        // "Empty Configuration after Valid Configuration").
+        if (isApproovEnabled() && config.isEmpty()) {
+            Log.d(TAG, "ApproovService already initialized with a valid config; ignoring empty configuration");
+            return;
+        }
+
+        // Initialize the platform SDK if not in bypass mode (empty config).
+        // State is only modified after the SDK confirms success, preserving the current
+        // operating mode (protected or bypass) if the call fails.
+        if (!config.isEmpty()) {
+            try {
+                boolean sdkInitialized = Approov.initialize(context.getApplicationContext(), config, "auto", comment);
+                if (!sdkInitialized) {
+                    Log.d(TAG, "Approov SDK already initialized");
+                }
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Approov initialization failed: " + e.getMessage());
+                throw e; // service-layer state NOT modified — prior operating mode preserved
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "Approov initialization failed: " + e.getMessage());
+                throw e; // service-layer state NOT modified — prior operating mode preserved
+            }
+        }
+        // SDK succeeded (or bypass) — now reset and commit new service-layer state.
+        isInitialized = false;
         pinningHostnameVerifier = null;
         proceedOnNetworkFail = false;
         useApproovStatusIfNoToken = false;
@@ -136,21 +169,62 @@ public class ApproovService {
         approovTokenPrefix = APPROOV_TOKEN_PREFIX;
         bindingHeader = null;
         substitutionHeaders = new HashMap<>();
-        substitutionQueryParams = new HashMap<>();
         exclusionURLRegexs = new HashMap<>();
         serviceMutator = ApproovServiceMutator.DEFAULT;
-        // initialize the Approov SDK
-        try {
-            if (config.length() != 0)
-                Approov.initialize(context, config, "auto", null);
-            Approov.setUserProperty("approov-service-httpsurlconn");
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Approov initialization failed: " + e.getMessage());
-            return;
+        isInitialized = true;
+        configString = config;
+        if (isApproovEnabled()) {
+            pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+            Approov.setUserProperty("approov-service-httpsurlconn/" + BuildConfig.APPROOV_SERVICE_VERSION);
         }
+    }
 
-        // build the custom hostname verifier
-        pinningHostnameVerifier = new PinningHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
+    /**
+     * Initializes the ApproovService with an account configuration.
+     *
+     * @param context the Application context
+     * @param config the configuration string, or empty for no SDK initialization
+     */
+    public static void initialize(Context context, String config) {
+        initialize(context, config, null);
+    }
+
+    /**
+     * Indicates whether the service layer has been initialized.
+     *
+     * @return true if the service layer has been initialized, false otherwise
+     */
+    public static synchronized boolean isInitialized() {
+        return isInitialized;
+    }
+
+    /**
+     * Indicates whether Approov protection is enabled for this service layer instance.
+     * If initialization used an empty config string then the layer is initialized
+     * but Approov protection is bypassed.
+     *
+     * @return true if Approov protection is enabled, false otherwise
+     */
+    public static synchronized boolean isApproovEnabled() {
+        return isInitialized && (configString != null) && !configString.isEmpty();
+    }
+
+    /**
+     * Resets the ApproovService state. This should only be used for testing purposes.
+     */
+    static synchronized void reset() {
+        isInitialized = false;
+        configString = null;
+        pinningHostnameVerifier = null;
+        proceedOnNetworkFail = false;
+        useApproovStatusIfNoToken = false;
+        approovTokenHeader = null;
+        approovTraceIDHeader = null;
+        approovTokenPrefix = null;
+        bindingHeader = null;
+        serviceMutator = ApproovServiceMutator.DEFAULT;
+        substitutionHeaders = null;
+        exclusionURLRegexs = null;
     }
 
     /**
@@ -181,6 +255,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static synchronized void setDevKey(String devKey) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "setDevKey: SDK not initialized");
+            throw new ApproovException("setDevKey: SDK not initialized");
+        }
         try {
             Approov.setDevKey(devKey);
             Log.d(TAG, "setDevKey");
@@ -204,7 +282,9 @@ public class ApproovService {
     public static synchronized void setApproovHeader(String header, String prefix) {
         Log.d(TAG, "setApproovHeader " + header + ", " + prefix);
         approovTokenHeader = header;
-        approovTokenPrefix = prefix;
+        // A null prefix means "no prefix" — coerce to "" so it is never concatenated as the
+        // literal string "null" before the token (TESTING_REQUIREMENTS §2 Custom Header Prefixes).
+        approovTokenPrefix = (prefix != null) ? prefix : APPROOV_TOKEN_PREFIX;
     }
 
     /**
@@ -317,49 +397,11 @@ public class ApproovService {
         return new HashMap<>(substitutionHeaders);
     }
 
-    /**
-     * Adds a key name for a query parameter that should be subject to secure
-     * strings substitution. This means that if the query parameter is present in a
-     * URL then the value will be used as a key to look up a secure string value
-     * which will be substituted as the query parameter value instead. This allows
-     * easy migration to the use of secure strings.
-     *
-     * @param key is the query parameter key name to be added for substitution
-     */
-    public static synchronized void addSubstitutionQueryParam(String key) {
-        if (pinningHostnameVerifier != null) {
-            Log.d(TAG, "addSubstitutionQueryParam " + key);
-            try {
-                Pattern pattern = Pattern.compile("[\\?&]" + Pattern.quote(key) + "=([^&;]+)");
-                substitutionQueryParams.put(key, pattern);
-            } catch (PatternSyntaxException e) {
-                Log.e(TAG, "addSubstitutionQueryParam " + key + " error: " + e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * Removes a query parameter key name previously added using
-     * addSubstitutionQueryParam.
-     *
-     * @param key is the query parameter key name to be removed for substitution
-     */
-    public static synchronized void removeSubstitutionQueryParam(String key) {
-        if (pinningHostnameVerifier != null) {
-            Log.d(TAG, "removeSubstitutionQueryParam " + key);
-            substitutionQueryParams.remove(key);
-        }
-    }
-
-    /**
-     * Gets the map of substitution query parameters.
-     *
-     * @return a map of query parameters to be substituted, mapped to the compiled
-     *         Pattern
-     */
-    public static synchronized Map<String, Pattern> getSubstitutionQueryParams() {
-        return new HashMap<>(substitutionQueryParams);
-    }
+    // Automated query-parameter substitution was removed (Issue #14): java.net.URL is
+    // immutable once the connection is opened, and the automated path broke request-mutation
+    // tracking that message signing relies on. Secure-string query values must now be fetched
+    // manually via fetchSecureString() and built into the URL before openConnection().
+    // See USAGE.md ("Substituting Query Parameters").
 
     /**
      * Adds an exclusion URL regular expression. If a URL for a request matches this regular expression
@@ -457,7 +499,7 @@ public class ApproovService {
      * use cached data.
      */
     public static synchronized void prefetch() {
-        if (pinningHostnameVerifier != null)
+        if (isApproovEnabled())
             // fetch an Approov token using a placeholder domain
             Approov.fetchApproovToken(new PrefetchCallbackHandler(), "approov.io");
     }
@@ -472,6 +514,10 @@ public class ApproovService {
     //
     // @throws ApproovException if there was a problem
     public static void precheck() throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "precheck: SDK not initialized");
+            throw new ApproovException("precheck: SDK not initialized");
+        }
         // try and fetch a non-existent secure string in order to check for a rejection
         Approov.TokenFetchResult approovResults;
         try {
@@ -498,6 +544,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getDeviceID() throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getDeviceID: SDK not initialized");
+            throw new ApproovException("getDeviceID: SDK not initialized");
+        }
         try {
             String deviceID = Approov.getDeviceID();
             Log.d(TAG, "getDeviceID: " + deviceID);
@@ -519,6 +569,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static void setDataHashInToken(String data) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "setDataHashInToken: SDK not initialized");
+            throw new ApproovException("setDataHashInToken: SDK not initialized");
+        }
         try {
             Approov.setDataHashInToken(data);
             Log.d(TAG, "setDataHashInToken");
@@ -545,6 +599,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchToken(String url) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "fetchToken: SDK not initialized");
+            throw new ApproovException("fetchToken: SDK not initialized");
+        }
         // fetch the Approov token
         Approov.TokenFetchResult approovResults;
         try {
@@ -598,6 +656,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchSecureString(String key, String newDef) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "fetchSecureString: SDK not initialized");
+            throw new ApproovException("fetchSecureString: SDK not initialized");
+        }
         // determine the type of operation as the values themselves cannot be logged
         String type = "lookup";
         if (newDef != null)
@@ -633,6 +695,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String fetchCustomJWT(String payload) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "fetchCustomJWT: SDK not initialized");
+            throw new ApproovException("fetchCustomJWT: SDK not initialized");
+        }
         // fetch the custom JWT catching any exceptions the SDK might throw
         Approov.TokenFetchResult approovResults;
         try {
@@ -660,6 +726,10 @@ public class ApproovService {
      * @return String ARC from last attestation request or empty string if network unavailable
      */
     public static String getLastARC() {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getLastARC: SDK not initialized");
+            return "";
+        }
         // Get the dynamic pins from Approov
         Map<String, List<String>> approovPins = Approov.getPins("public-key-sha256");
         if (approovPins == null || approovPins.isEmpty()) {
@@ -707,6 +777,10 @@ public class ApproovService {
      * @throws ApproovException if the attrs parameter is invalid or the SDK is not initialized
      */
     public static void setInstallAttrsInToken(String attrs) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "setInstallAttrsInToken: SDK not initialized");
+            throw new ApproovException("setInstallAttrsInToken: SDK not initialized");
+        }
         try {
             Approov.setInstallAttrsInToken(attrs);
             Log.d(TAG, "setInstallAttrsInToken");
@@ -779,6 +853,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getAccountMessageSignature(String message) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getAccountMessageSignature: SDK not initialized");
+            throw new ApproovException("getAccountMessageSignature: SDK not initialized");
+        }
         try {
             String signature = Approov.getAccountMessageSignature(message);
             Log.d(TAG, "getAccountMessageSignature");
@@ -812,6 +890,10 @@ public class ApproovService {
      * @throws ApproovException if there was a problem
      */
     public static String getInstallMessageSignature(String message) throws ApproovException {
+        if (!isApproovEnabled()) {
+            Log.e(TAG, "getInstallMessageSignature: SDK not initialized");
+            throw new ApproovException("getInstallMessageSignature: SDK not initialized");
+        }
         try {
             String signature = Approov.getInstallMessageSignature(message);
             Log.d(TAG, "getInstallMessageSignature");
@@ -868,22 +950,15 @@ public class ApproovService {
     }
 
     /**
-     * Holds the outcome of configured query parameter substitutions so callers can
-     * update both the effective URL and the mutation metadata in a single step.
+     * Holds the effective URL for a prepared request. Automated query-parameter substitution
+     * was removed (Issue #14), so the URL is never changed here; this wrapper is retained only
+     * to carry the URL into the buffered-connection body-digest flow.
      */
     static final class QuerySubstitutionResult {
         final URL url;
-        final String originalURL;
-        final List<String> substitutedQueryKeys;
 
-        QuerySubstitutionResult(URL url, String originalURL, List<String> substitutedQueryKeys) {
+        QuerySubstitutionResult(URL url) {
             this.url = url;
-            this.originalURL = originalURL;
-            this.substitutedQueryKeys = substitutedQueryKeys;
-        }
-
-        boolean hasEffectiveUrlChange() {
-            return !originalURL.equals(url.toString());
         }
     }
 
@@ -893,17 +968,9 @@ public class ApproovService {
      * written after addApproov returns.
      *
      * @param request is the request being prepared
-     * @param querySubstitutionResult is the configured URL substitution result
      * @return true if the caller must continue using a buffered connection wrapper
      */
-    private static boolean shouldUseBufferedConnection(
-            HttpsURLConnection request,
-            QuerySubstitutionResult querySubstitutionResult
-    ) {
-        if (querySubstitutionResult.hasEffectiveUrlChange()) {
-            return true;
-        }
-
+    private static boolean shouldUseBufferedConnection(HttpsURLConnection request) {
         if (request.getDoOutput()) {
             return true;
         }
@@ -927,8 +994,13 @@ public class ApproovService {
      */
     static synchronized PreparedRequestData prepareApproovRequest(HttpsURLConnection request) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
+
+        if (!isApproovEnabled()) {
+            // In bypass mode, return empty/noop modifications immediately without invoking processed request callback
+            return new PreparedRequestData(getServiceMutator(), new ApproovRequestMutations(), false);
+        }
 
         // cache the mutator for the duration of the request processing to make
         // sure it is not changed mid-flight
@@ -984,7 +1056,10 @@ public class ApproovService {
 
             String traceIDHeader = getApproovTraceIDHeader();
             String traceID = getTokenFetchTraceID(approovResults);
-            if ((traceIDHeader != null) && (traceID != null) && !traceID.isEmpty()) {
+            // Emit the trace header whenever the SDK provides a value, even an empty one, as
+            // evidence that Approov processing occurred (TESTING_REQUIREMENTS §2 Missing Artifacts
+            // Fallback). Only a null trace ID (none available) leaves the header off.
+            if ((traceIDHeader != null) && (traceID != null)) {
                 setTraceIDHeaderKey = traceIDHeader;
                 setTraceIDHeaderValue = traceID;
             }
@@ -1034,78 +1109,36 @@ public class ApproovService {
     }
 
     /**
-     * Performs the configured query parameter substitutions for a URL and captures
-     * the mutation metadata needed by the httpsurlconn service layer to keep
-     * request-header and URL substitutions in sync.
-     *
-     * @param url     is the URL being analyzed for substitution
-     * @param mutator is the mutator that decides how substitution results are handled
-     * @return the query substitution result
-     * @throws ApproovException if it is not possible to obtain secure strings for
-     *                          substitution
-     */
-    static synchronized QuerySubstitutionResult substituteQueryParamsDetailed(URL url, ApproovServiceMutator mutator)
-            throws ApproovException {
-        // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
-            throw new ApproovException("Approov not initialized");
-
-        // check if the URL matches one of the exclusion regexs and just return if so
-        String originalURL = url.toString();
-        for (Pattern pattern : exclusionURLRegexs.values()) {
-            Matcher matcher = pattern.matcher(originalURL);
-            if (matcher.find())
-                return new QuerySubstitutionResult(url, originalURL, Collections.emptyList());
-        }
-
-        String replacementURL = originalURL;
-        Map<String, Pattern> queryParams = getSubstitutionQueryParams();
-        List<String> queryKeys = new ArrayList<>(queryParams.size());
-        for (Map.Entry<String, Pattern> entry : queryParams.entrySet()) {
-            String queryKey = entry.getKey();
-            Matcher matcher = entry.getValue().matcher(replacementURL);
-            if (matcher.find()) {
-                // we have found an occurrence of the query parameter to be replaced so
-                // we look up the existing value as a key for a secure string
-                String queryValue = matcher.group(1);
-                Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
-                Log.d(TAG, "Substituting query parameter: " + queryKey + ", " + approovResults.getStatus().toString());
-                if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryKey)) {
-                    queryKeys.add(queryKey);
-                    replacementURL = new StringBuilder(replacementURL)
-                            .replace(matcher.start(1), matcher.end(1), approovResults.getSecureString())
-                            .toString();
-                }
-            }
-        }
-
-        if (originalURL.equals(replacementURL))
-            return new QuerySubstitutionResult(url, originalURL, Collections.emptyList());
-
-        try {
-            return new QuerySubstitutionResult(new URL(replacementURL), originalURL, queryKeys);
-        } catch (MalformedURLException e) {
-            throw new ApproovException("Malformed substituted URL: " + e.getMessage());
-        }
-    }
-
-    /**
      * Adds Approov to the given request using the legacy in-place API. The
      * Approov token is added in a header, any optional TraceID debug value is
      * added in a separate header, the HostnameVerifier may be overridden to pin
      * the request, and configured secure string header substitutions are applied.
      *
      * This method preserves the binary-compatible API from earlier releases. Use
-     * addApproovToConnection(HttpsURLConnection) when configured query
-     * substitutions may change the effective URL or when the caller needs
-     * deferred body-aware processing such as message-signing body digests.
+     * addApproovToConnection(HttpsURLConnection) when the caller needs deferred
+     * body-aware processing such as message-signing body digests.
      *
      * @param request is the HttpsUrlConnection to which Approov is being added
      * @throws ApproovException if it is not possible to obtain an Approov token or
      *                          secure strings
      */
     public static synchronized void addApproov(HttpsURLConnection request) throws ApproovException {
-        addApproovInternal(request, false);
+        addApproovInternal(request, false, null);
+    }
+
+    /**
+     * Adds Approov to the given request, supplying the request body bytes so that a
+     * message-signing {@code Content-Digest} can be computed over them. Use this overload
+     * when message signing is configured with a body digest and the body is available as a
+     * repeatable byte array. The SHA-256 (or SHA-512) digest of {@code body} is set in the
+     * {@code Content-Digest} header and covered by the signature.
+     *
+     * @param request is the HttpsUrlConnection to which Approov is being added
+     * @param body    is the exact request body that will be written, used for the digest
+     * @throws ApproovException if it is not possible to obtain an Approov token or secure strings
+     */
+    public static synchronized void addApproov(HttpsURLConnection request, byte[] body) throws ApproovException {
+        addApproovInternal(request, false, body);
     }
 
     /**
@@ -1119,56 +1152,45 @@ public class ApproovService {
      * @param request is the HttpsUrlConnection to which Approov is being added
      * @return the processed request, ready to be used by the caller. In the
      *         common case this is the same connection instance that was passed in.
-     *         If configured query substitutions change the target URL, or if
-     *         deferred body-aware processing is required, then a wrapped
+     *         If deferred body-aware processing is required, a buffered wrapper
      *         connection is returned and the caller must continue to use that
      *         returned instance.
      * @throws ApproovException if it is not possible to obtain an Approov token or
      *                          secure strings
      */
     public static synchronized HttpsURLConnection addApproovToConnection(HttpsURLConnection request) throws ApproovException {
-        return addApproovInternal(request, true);
+        return addApproovInternal(request, true, null);
     }
 
     private static HttpsURLConnection addApproovInternal(
             HttpsURLConnection request,
-            boolean allowBufferedConnection
+            boolean allowBufferedConnection,
+            byte[] body
     ) throws ApproovException {
         // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
+        if (!isInitialized)
             throw new ApproovException("Approov not initialized");
 
         // Apply the non-signing parts of the HttpsURLConnection preparation flow immediately so
         // callers continue to see any ApproovException at addApproov() time.
         PreparedRequestData preparedRequestData = prepareApproovRequest(request);
 
-        // Apply any configured query parameter substitutions before deciding if we
-        // can finish processing on the original connection or if we need a wrapper
-        // because the effective URL changed.
-        QuerySubstitutionResult querySubstitutionResult;
-        if (preparedRequestData.invokeProcessedCallback) {
-            querySubstitutionResult = substituteQueryParamsDetailed(request.getURL(), preparedRequestData.mutator);
-        } else {
-            querySubstitutionResult = new QuerySubstitutionResult(
-                    request.getURL(),
-                    request.getURL().toString(),
-                    Collections.emptyList()
-            );
+        // Thread explicit body bytes (from addApproov(connection, byte[])) into the mutations
+        // so message signing can compute the Content-Digest over them.
+        if (body != null) {
+            preparedRequestData.changes.setBodyBytes(body);
         }
 
         if (!preparedRequestData.invokeProcessedCallback) {
             return request;
         }
 
-        if (shouldUseBufferedConnection(request, querySubstitutionResult) && allowBufferedConnection) {
+        // Query parameters are never auto-substituted (Issue #14), so the effective URL never
+        // changes here. A buffered connection is still used for body-bearing methods so message
+        // signing can compute the Content-Digest over the body written after addApproov returns.
+        QuerySubstitutionResult querySubstitutionResult = new QuerySubstitutionResult(request.getURL());
+        if (shouldUseBufferedConnection(request) && allowBufferedConnection) {
             return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
-        }
-
-        if (querySubstitutionResult.hasEffectiveUrlChange()) {
-            throw new ApproovException(
-                    "Configured query parameter substitution changed the request URL; " +
-                            "use addApproovToConnection(HttpsURLConnection) and continue with the returned connection"
-            );
         }
 
         return preparedRequestData.mutator.handleInterceptorProcessedRequest(
@@ -1177,74 +1199,9 @@ public class ApproovService {
         );
     }
 
-    /**
-     * Applies all configured query parameter substitutions to the supplied URL.
-     * Since this modifies the URL itself it must be done before opening the
-     * HttpsURLConnection. The mutator is consulted for each substitution result so
-     * callers can customize how secure string fetch outcomes are handled.
-     *
-     * @param url is the URL being analyzed for substitution
-     * @return URL passed in, or modified with a new URL if substitutions were made
-     * @throws ApproovException if it is not possible to obtain secure strings for
-     *                          substitution
-     */
-    public static synchronized URL substituteQueryParams(URL url) throws ApproovException {
-        return substituteQueryParamsDetailed(url, getServiceMutator()).url;
-    }
-
-    /**
-     * Substitutes the given query parameter in the URL. If no substitution is made then the
-     * original URL is returned, otherwise a new one is constructed with the revised query
-     * parameter value. Since this modifies the URL itself this must be done before opening the
-     * HttpsURLConnection. If it is not currently possible to fetch secure strings token due to
-     * networking issues then ApproovNetworkException is thrown and a user initiated retry of the
-     * operation should be allowed. ApproovRejectionException may be thrown if the attestation
-     * fails and secure strings cannot be obtained. Other ApproovExecptions represent a more
-     * permanent error condition.
-     *
-     * @param url is the URL being analyzed for substitution
-     * @param queryParameter is the parameter to be potentially substituted
-     * @return URL passed in, or modified with a new URL if required
-     * @throws ApproovException if it is not possible to obtain secure strings for substitution
-     */
-    public static synchronized URL substituteQueryParam(URL url, String queryParameter) throws ApproovException {
-        // throw if we couldn't initialize the SDK
-        if (pinningHostnameVerifier == null)
-            throw new ApproovException("Approov not initialized");
-
-        // check if the URL matches one of the exclusion regexs and just return if so
-        String urlString = url.toString();
-        for (Pattern pattern: exclusionURLRegexs.values()) {
-            Matcher matcher = pattern.matcher(urlString);
-            if (matcher.find())
-                return url;
-        }
-
-        ApproovServiceMutator mutator = getServiceMutator();
-
-        // perform the query substitution if it is present
-        Pattern pattern = Pattern.compile("[\\?&]" + Pattern.quote(queryParameter) + "=([^&;]+)");
-        Matcher matcher = pattern.matcher(urlString);
-        if (matcher.find()) {
-            // we have found an occurrence of the query parameter to be replaced so we look up the existing
-            // value as a key for a secure string
-            String queryValue = matcher.group(1);
-            Approov.TokenFetchResult approovResults = Approov.fetchSecureStringAndWait(queryValue, null);
-            Log.d(TAG, "Substituting query parameter: " + queryParameter + ", " + approovResults.getStatus().toString());
-            if (mutator.handleInterceptorQueryParamSubstitutionResult(approovResults, queryParameter)) {
-                // perform a query substitution
-                try {
-                    return new URL(new StringBuilder(urlString).replace(matcher.start(1),
-                            matcher.end(1), approovResults.getSecureString()).toString());
-                }
-                catch(MalformedURLException e) {
-                    Log.d(TAG, "Substituting query parameter exception: " + e.toString());
-                    return url;
-                }
-            }
-        }
-        return url;
-    }
+    // substituteQueryParams(URL) and substituteQueryParam(URL, String) were removed (Issue #14).
+    // Fetch secure-string query values manually with fetchSecureString() and build the URL before
+    // openConnection(); see USAGE.md ("Substituting Query Parameters").
 }
 
 /**
@@ -1366,6 +1323,12 @@ final class PinningHostnameVerifier implements HostnameVerifier {
 
     @Override
     public boolean verify(String hostname, SSLSession session) {
+        if (!ApproovService.isApproovEnabled()) {
+            // Bypass mode: skip Approov pinning, but still apply standard hostname
+            // verification via the OS/default verifier — never blindly accept
+            // (TESTING_REQUIREMENTS §4 "Bypass Mode Must Not Skip Certificate Trust Validation").
+            return delegate.verify(hostname, session);
+        }
         // check the delegate function first and only proceed if it passes
         if (delegate.verify(hostname, session)) try {
             // extract the set of valid pins for the hostname
