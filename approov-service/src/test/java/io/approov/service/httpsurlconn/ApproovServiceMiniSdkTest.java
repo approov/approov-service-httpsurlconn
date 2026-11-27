@@ -34,11 +34,7 @@ import static org.junit.Assert.*;
 
 /**
  * Integration tests for the ApproovService HttpsURLConnection service layer.
- * Tests are organized to match the sections defined in TESTING_REQUIREMENTS.md
- * from the core-service-layers-testing repository. Each test includes a comment
- * referencing the requirement(s) it covers.
- *
- * @see <a href="https://github.com/approov/core-service-layers-testing/blob/main/TESTING_REQUIREMENTS.md">TESTING_REQUIREMENTS.md</a>
+ * The tests run against the test SDK, which simulates the Approov attester.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
@@ -61,11 +57,10 @@ public class ApproovServiceMiniSdkTest {
 
     // ==================================================================================
     // SECTION 1: Initialization
-    // TESTING_REQUIREMENTS.md §1
     // ==================================================================================
 
     /**
-     * §1 Same Config Re-initialization / Different Config Re-initialization
+     * Same Config Re-initialization / Different Config Re-initialization
      *
      * Re-initialize with the same config string should not fail.
      * Re-initialize with a different config string should fail with an exception.
@@ -82,7 +77,7 @@ public class ApproovServiceMiniSdkTest {
             fail("Expected IllegalStateException");
         } catch (IllegalStateException e) {
             // The service layer forwards a different-config re-init to the platform SDK and
-            // surfaces the SDK's IllegalStateException (TESTING_REQUIREMENTS §1), rather than
+            // surfaces the SDK's IllegalStateException, rather than
             // using its own service-layer guard message.
             assertNotNull(e.getMessage());
             assertTrue(e.getMessage().toLowerCase().contains("already been initialized"));
@@ -90,7 +85,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 Empty Configuration after Valid Configuration: an empty-config init after a valid one
+     * Empty Configuration after Valid Configuration: an empty-config init after a valid one
      * is ignored — Approov protection remains active under the original config and the empty
      * call is not forwarded to the SDK.
      */
@@ -107,7 +102,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 Empty Configuration (Valid Comment) / Empty Configuration (Empty Comment)
+     * Empty Configuration (Valid Comment) / Empty Configuration (Empty Comment)
      *
      * Initializing with an empty config should keep the service layer initialized
      * while making the returned connection behave like a plain HttpsURLConnection with no
@@ -117,8 +112,8 @@ public class ApproovServiceMiniSdkTest {
     public void testInitializeWithEmptyConfigBuildsPlainClient() throws Exception {
         reinitializeService(scenarioJson(uniqueCaseName("empty-config"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
-        // reach bypass from a clean state: an empty config after a valid one is now ignored
-        // (§1 "Empty Configuration after Valid Configuration"), so reset before the empty init.
+        // reach bypass from a clean state: an empty config after a valid one is now ignored,
+        // so reset before the empty init.
         resetApproovServiceState();
         ApproovService.initialize(context, "", "reinit-empty-config");
 
@@ -136,7 +131,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 Empty Configuration then Valid Configuration
+     * Empty Configuration then Valid Configuration
      *
      * Initializing first with an empty config should allow a later valid config to
      * enable Approov protection at runtime.
@@ -145,8 +140,8 @@ public class ApproovServiceMiniSdkTest {
     public void testInitializeWithEmptyConfigCanLaterEnableApproov() throws Exception {
         reinitializeService(scenarioJson(uniqueCaseName("empty-then-valid"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
-        // reach bypass from a clean state: an empty config after a valid one is now ignored
-        // (§1 "Empty Configuration after Valid Configuration"), so reset before the empty init.
+        // reach bypass from a clean state: an empty config after a valid one is now ignored,
+        // so reset before the empty init.
         resetApproovServiceState();
         ApproovService.initialize(context, "", "reinit-empty-config");
 
@@ -180,11 +175,10 @@ public class ApproovServiceMiniSdkTest {
 
     // ==================================================================================
     // SECTION 2: Request Processing & Token Behaviors
-    // TESTING_REQUIREMENTS.md §2
     // ==================================================================================
 
     /**
-     * §2 Precheck Evaluation
+     * Precheck Evaluation
      *
      * A call to precheck() should trigger a secure string fetch and evaluate
      * UNKNOWN_KEY as a success path.
@@ -195,7 +189,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 (Supporting test)
+     * (Supporting test)
      *
      * Verifies the Mini SDK returns a stable device ID for the test environment.
      */
@@ -205,7 +199,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Protected Request Processing / Token Binding Hash
+     * Protected Request Processing / Token Binding Hash
      *
      * A protected request is processed and modified by the service layer.
      * The token's `pay` claim should contain the SHA256 hash of the binding header value.
@@ -265,7 +259,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Missing Binding Header
+     * Missing Binding Header
      *
      * If a binding header is configured but is missing from the request, no data hash should
      * be set and no `pay` claim should be present in the token. This also verifies that
@@ -308,7 +302,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Protected Request Processing
+     * Protected Request Processing
      *
      * Verifies that a protected request receives a signed token with expected
      * standard claims (ip, did, mskid, arc, exp).
@@ -327,7 +321,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Missing Artifacts Fallback
+     * Missing Artifacts Fallback
      *
      * When the Approov service is unavailable (NO_APPROOV_SERVICE), the request
      * should proceed with empty Approov token and trace ID headers.
@@ -354,7 +348,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Exclusion URL Matching
+     * Exclusion URL Matching
      *
      * An excluded URL (using regular expression checks) should not be processed
      * by the service layer.
@@ -375,7 +369,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * Each SDK fetch status is correctly mapped to the expected exception type.
      * NO_NETWORK → ApproovNetworkException
@@ -401,7 +395,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * REJECTED → ApproovFetchStatusException
      */
@@ -425,7 +419,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * BAD_URL → ApproovFetchStatusException
      */
@@ -448,7 +442,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * POOR_NETWORK → ApproovNetworkException
      */
@@ -471,7 +465,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * MITM_DETECTED → ApproovNetworkException
      */
@@ -494,7 +488,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * INTERNAL_ERROR → ApproovFetchStatusException
      */
@@ -517,7 +511,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §2 Token Fallback Status (error status mapping)
+     * Token Fallback Status (error status mapping)
      *
      * UNKNOWN_URL → ApproovFetchStatusException
      */
@@ -541,11 +535,10 @@ public class ApproovServiceMiniSdkTest {
 
     // ==================================================================================
     // SECTION 3: Service Mutators & Decision Overrides
-    // TESTING_REQUIREMENTS.md §3
     // ==================================================================================
 
     /**
-     * §3 Custom Mutators / Decision Overrides
+     * Custom Mutators / Decision Overrides
      *
      * Overriding the default fail-closed behavior for MITM_DETECTED via a custom
      * ApproovServiceMutator allows the request to proceed without a token.
@@ -582,11 +575,10 @@ public class ApproovServiceMiniSdkTest {
 
     // ==================================================================================
     // SECTION 4: Pinning Configuration & Scenarios
-    // TESTING_REQUIREMENTS.md §4
     // ==================================================================================
 
     /**
-     * §4 Generate Valid Pins / Generate Invalid Pins
+     * Generate Valid Pins / Generate Invalid Pins
      *
      * Verifies that when the SDK provides invalid (dummy) pins, the CertificatePinner
      * rejects the connection. This also implicitly validates that valid pins (default)
@@ -616,7 +608,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §4 Accept Any Pins
+     * Accept Any Pins
      *
      * The SDK provides no specific pins for the API and suppresses the wildcard
      * fallback pins, allowing the connection to succeed without pinning validation.
@@ -634,7 +626,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §4 Dynamic Pinning Updates
+     * Dynamic Pinning Updates
      *
      * When pins are updated dynamically to an invalid state via rebuildPins(),
      * subsequent requests on the same client should fail with a pinning error.
@@ -664,12 +656,11 @@ public class ApproovServiceMiniSdkTest {
 
     // ==================================================================================
     // SECTION 5: Message Signing
-    // TESTING_REQUIREMENTS.md §5
     // ==================================================================================
 
     /**
-     * §5 Install Signature Success / Single Signature Application
-     * §2 Unprotected Request Processing
+     * Install Signature Success / Single Signature Application
+     * Unprotected Request Processing
      *
      * Install message signing successfully generates signature headers (install=...)
      * only once per request. Unprotected requests receive no signature headers.
@@ -697,7 +688,7 @@ public class ApproovServiceMiniSdkTest {
             
             String signature = getHeader(reply, "Signature");
             assertNotNull(signature);
-            // Signature member value MUST be a Byte Sequence: install=:<base64>: (RFC 9421 §4.2),
+            // Signature member value MUST be a Byte Sequence: install=:<base64>: (RFC 9421 section 4.2),
             // NOT the quoted-string form install="...". The =:...: colons prove the byte sequence.
             assertTrue("Signature must be a byte sequence (install=:<base64>:)",
                     signature.startsWith("install=:") && signature.endsWith(":"));
@@ -716,7 +707,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §5 Account Message Signing
+     * Account Message Signing
      *
      * Account message signing produces the expected signature headers (account=...).
      */
@@ -743,7 +734,7 @@ public class ApproovServiceMiniSdkTest {
             
             String signature = getHeader(reply, "Signature");
             assertNotNull(signature);
-            // Byte Sequence form: account=:<base64>: (RFC 9421 §4.2), not account="...".
+            // Byte Sequence form: account=:<base64>: (RFC 9421 section 4.2), not account="...".
             assertTrue("Signature must be a byte sequence (account=:<base64>:)",
                     signature.startsWith("account=:") && signature.endsWith(":"));
             assertFalse(signature.contains("install="));
@@ -751,7 +742,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §5 Install Key Generation Failure / Signing Failure Fallback
+     * Install Key Generation Failure / Signing Failure Fallback
      *
      * Install message signature fails if key pair generation fails; no signature
      * headers are added to the request, but the request proceeds with a token.
@@ -783,7 +774,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §5 Digest Body Application
+     * Digest Body Application
      *
      * The digest body (Content-Digest) for an install message signature is present
      * for POST and PUT requests when body digest is configured.
@@ -826,11 +817,10 @@ public class ApproovServiceMiniSdkTest {
 
     // ==================================================================================
     // SECTION 6: Secure Strings & Custom JWT
-    // TESTING_REQUIREMENTS.md §6
     // ==================================================================================
 
     /**
-     * §6 Valid Secure String Key
+     * Valid Secure String Key
      *
      * Fetch a secure string using a valid key returns the expected value.
      */
@@ -849,7 +839,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Non-existent Secure String Key
+     * Non-existent Secure String Key
      *
      * Fetch a secure string using a non-existent key returns null.
      */
@@ -867,7 +857,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Empty Secure String Key
+     * Empty Secure String Key
      *
      * Fetch a secure string using an empty key throws an exception.
      */
@@ -884,7 +874,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Nil Secure String Key
+     * Nil Secure String Key
      *
      * Fetch a secure string using a null key throws an exception.
      */
@@ -905,7 +895,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Custom JWT Fetch
+     * Custom JWT Fetch
      *
      * Fetching a Custom JWT should accurately return the marshaled payload as a token.
      */
@@ -921,7 +911,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Custom JWT Fetch (18KB payload)
+     * Custom JWT Fetch (18KB payload)
      *
      * Fetching a Custom JWT with an 18KB JSON payload should work correctly.
      */
@@ -943,7 +933,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Custom JWT Fetch (disabled)
+     * Custom JWT Fetch (disabled)
      *
      * Fetching a Custom JWT when the feature is disabled throws an exception.
      */
@@ -962,7 +952,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §6 Custom JWT Fetch (malformatted JSON)
+     * Custom JWT Fetch (malformatted JSON)
      *
      * Fetching a Custom JWT with a malformatted JSON string throws an exception.
      */
@@ -1093,7 +1083,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 First-ever empty config is isolated in a fresh SDK process.
+     * First-ever empty config is isolated in a fresh SDK process.
      */
     @Test
     public void testFirstEverEmptyConfig() throws Exception {
@@ -1101,7 +1091,7 @@ public class ApproovServiceMiniSdkTest {
         reinitializeService(scenarioJson(uniqueCaseName("first-empty-config"),
             "\"protectedDomains\": [\"" + getTargetHost() + "\"]"));
         // reinitializeService does a valid init; reset so the empty init below is a fresh
-        // first-init (§1 "Empty Configuration"), not an ignored empty-after-valid (§1 L10).
+        // first-init, not an ignored empty-after-valid.
         resetApproovServiceState();
         ApproovService.initialize(context, "", "reinit-first-empty");
         
@@ -1117,7 +1107,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 Empty-to-valid failure preservation: empty config succeeds, later valid config fails, service remains initialized-but-disabled.
+     * Empty-to-valid failure preservation: empty config succeeds, later valid config fails, service remains initialized-but-disabled.
      */
     @Test
     public void testEmptyToValidFailurePreservation() throws Exception {
@@ -1156,7 +1146,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 Cross-service initialization covered with two Java service layers in the same process
+     * Cross-service initialization covered with two Java service layers in the same process
      */
     @Test
     public void testCrossServiceInitialization() throws Exception {
@@ -1168,7 +1158,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §4 Strict body digest mode should include a negative test for signed requests that omit the bodyBytes overload.
+     * Strict body digest mode should include a negative test for signed requests that omit the bodyBytes overload.
      */
     @Test
     public void testStrictBodyDigestOmission() throws Exception {
@@ -1191,7 +1181,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §4 PATCH body digest behavior
+     * PATCH body digest behavior
      */
     @Test
     public void testPatchBodyDigestBehavior() throws Exception {
@@ -1210,7 +1200,7 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §7 Custom token and trace header names/prefixes replay coverage
+     * Custom token and trace header names/prefixes replay coverage
      */
     @Test
     public void testCustomTokenAndTraceHeaders() throws Exception {
