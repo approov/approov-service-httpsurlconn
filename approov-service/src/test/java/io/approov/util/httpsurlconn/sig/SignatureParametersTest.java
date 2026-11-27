@@ -83,4 +83,11 @@ public class SignatureParametersTest {
         String actual = params.toComponentValue().serialize();
         assertEquals("Params failure - " + name, expected, actual);
     }
+
+    @Test
+    public void aCopyKeepsTheDebugMode() {
+        SignatureParameters base = new SignatureParameters();
+        base.setDebugMode(true);
+        assertTrue(new SignatureParameters(base).isDebugMode());
+    }
 }

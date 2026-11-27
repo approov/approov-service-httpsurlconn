@@ -1144,8 +1144,8 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
 
         @Override
         public String getField(String name) {
-            String value = request.getRequestProperty(name);
-            return value == null ? "" : value;
+            // a field the request does not carry has no value, so a signature that covers it cannot be made
+            return request.getRequestProperty(name);
         }
 
         @Override

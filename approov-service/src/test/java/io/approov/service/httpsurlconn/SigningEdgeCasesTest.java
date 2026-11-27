@@ -367,4 +367,16 @@ public class SigningEdgeCasesTest {
         assertNotNull(digest);
         assertTrue(digest, digest.matches("install=:[^:]+:, account=:[^:]+:"));
     }
+
+    @Test
+    public void aCoveredHeaderThatTheRequestDoesNotCarrySendsItUnsigned() throws Exception {
+        // a covered header that is absent has no value, so the signature cannot be made and the request is
+        // sent unsigned rather than signed over an empty value that the backend cannot rebuild
+        SignatureParameters param = new SignatureParameters().addComponentIdentifier("x-not-sent");
+        ShadowLog.reset();
+        assertUnsigned("covered header not sent", ApproovTestSupport.sign(new ApproovDefaultMessageSigning()
+                .setDefaultFactory(ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory(param)),
+                URL));
+        assertEquals(1, signingErrors());
+    }
 }

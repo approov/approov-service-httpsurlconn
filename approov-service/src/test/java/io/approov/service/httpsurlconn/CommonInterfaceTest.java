@@ -435,4 +435,11 @@ public class CommonInterfaceTest {
             assertTrue(ApproovService.isApproovProtectionEnabled());
         }
     }
+
+    @Test
+    public void theSubstitutionAndExclusionGettersAreEmptyBeforeInitialize() {
+        ApproovService.reset();
+        assertTrue(ApproovService.getSubstitutionHeaders().isEmpty());
+        assertTrue(ApproovService.getExclusionURLRegexs().isEmpty());
+    }
 }

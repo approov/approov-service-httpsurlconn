@@ -92,10 +92,10 @@ public class ApproovService {
 
     // map of headers that should have their values substituted for secure strings, mapped to their
     // required prefixes
-    private static Map<String, String> substitutionHeaders = null;
+    private static Map<String, String> substitutionHeaders = new HashMap<>();
 
     // set of URL regexs that should be excluded from any Approov protection, mapped to the compiled Pattern
-    private static Map<String, Pattern> exclusionURLRegexs = null;
+    private static Map<String, Pattern> exclusionURLRegexs = new HashMap<>();
 
     /**
      * Construction is disallowed as this is a static only class.
@@ -249,8 +249,8 @@ public class ApproovService {
         approovTokenPrefix = null;
         bindingHeader = null;
         serviceMutator = ApproovServiceMutator.DEFAULT;
-        substitutionHeaders = null;
-        exclusionURLRegexs = null;
+        substitutionHeaders = new HashMap<>();
+        exclusionURLRegexs = new HashMap<>();
         ApproovLog.setLevel(ApproovLogLevel.INFO);
     }
 

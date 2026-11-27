@@ -30,6 +30,7 @@ Entries marked **Breaking** need a source change. See [Upgrading from 3.5.x](REA
 - A signature covers each component once, also when the token header is one of the optional headers of the factory.
 - Only a required body digest that cannot be generated fails a request closed, as an `ApproovException` with a `RequiredBodyDigestException` cause. Any other failure to build the signature parameters sends the request unsigned and logs an error. Examples are missing base parameters and an exception from your own factory.
 - A request that `addApproovToConnection` buffers looks up its headers without regard to case, as `HttpURLConnection` does. A message signature over a request with a body covers the header values that the package sends.
+- If a signature covers a header that the request does not carry, the package sends the request unsigned and logs an error. Before, it signed an empty value.
 - A structured field decimal keeps the leading zeros of its fraction, so `1.05` stays `1.05`.
 - An unsupported message signing algorithm fails the request with `ApproovException`, where 3.5.x threw `IllegalStateException`.
 

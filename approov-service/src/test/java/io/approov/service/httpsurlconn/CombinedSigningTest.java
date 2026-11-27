@@ -220,6 +220,7 @@ public class CombinedSigningTest {
         // with a token header mutation and a factory the result of the decisions is what is signed
         signer.setDefaultFactory(ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory());
         HttpsURLConnection other = ApproovTestSupport.connection(URL);
+        other.setRequestProperty("Approov-Token", "t");
         other.setRequestProperty("X-Decisions", "ran");
         decisions.processedResult = other;
         HttpsURLConnection signed = signer.handleInterceptorProcessedRequest(request,
