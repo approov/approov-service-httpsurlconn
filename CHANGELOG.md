@@ -15,6 +15,7 @@ Entries marked **Breaking** need a source change.
 - Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
 - The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
 - A failed secure string fetch no longer fails the request under the standard mutators. The package skips the substitution and the request proceeds.
+- `ApproovRejectionException` is now a subclass of `ApproovFetchStatusException` with the status `REJECTED`, so a handler for `ApproovFetchStatusException` catches it. Its constructor and getters stay the same.
 - `getLastARC()` makes no token fetch of its own. It returns the ARC of the most recent token, secure string or custom JWT fetch, or an empty string.
 - The package logs a missing install or account signature as a warning once per process. It logs a request that it sends unsigned as an error once per process. It logs later occurrences at debug level.
 - The signed `@target-uri` leaves out an explicit default port (`:443` for `https`, `:80` for `http`) and any `#fragment`. The signed `@authority` is the lowercase host with a non-default port. The signature uses the path `/` for a URL with no path. The package no longer reads the URL with `java.net.URI`. A host factory matches the host name without regard to case and without a port.
