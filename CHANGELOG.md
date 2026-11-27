@@ -4,6 +4,21 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.7.0] - YYYY-MM-DD
+
+Entries marked **Breaking** need a source change.
+
+### Changed
+- **Breaking:** The message signing helper classes moved from `io.approov.util.http.sfv` and `io.approov.util.sig` to `io.approov.util.httpsurlconn.http.sfv` and `io.approov.util.httpsurlconn.sig`. Update imports of classes such as `SignatureParameters` and `ComponentProvider`.
+- Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
+- The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
+
+### Added
+- `ApproovService.setLoggingLevel(ApproovLogLevel)`, `INFO` by default. `OFF` silences the layer, and debug logging for the `ApproovService` tag raises any other level to `DEBUG`. The package logs the loggable token at `DEBUG` only, with the URL without its query, user info or fragment.
+
+### Removed
+- BouncyCastle, which the package no longer bundles.
+
 ## [3.5.7] - 2026-11-27
 
 ### Added

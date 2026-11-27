@@ -17,7 +17,6 @@
 
 package io.approov.service.httpsurlconn;
 
-import android.util.Log;
 import android.util.Base64;
 
 import io.approov.util.httpsurlconn.tink.subtle.EllipticCurves;
@@ -237,7 +236,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         try {
             message = baseBuilder.createSignatureBase();
         } catch (Exception e) {
-            Log.e(TAG, "Failed to build the signature base - proceeding unsigned " + e);
+            ApproovLog.e(TAG, "Failed to build the signature base - proceeding unsigned " + e);
             return request;
         }
         // WARNING never log the message as it contains an Approov token which provides access to your API.
@@ -252,17 +251,17 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 try {
                     base64 = getInstallMessageSignature(message);
                 } catch (ApproovException e) {
-                    Log.e(TAG, "Failed to get InstallMessageSignature - proceeding unsigned " + e);
+                    ApproovLog.e(TAG, "Failed to get InstallMessageSignature - proceeding unsigned " + e);
                     return request;
                 }
                 if (base64.isEmpty()) {
-                    Log.e(TAG, "InstallMessageSignature is empty - proceeding unsigned");
+                    ApproovLog.e(TAG, "InstallMessageSignature is empty - proceeding unsigned");
                     return request;
                 }
                 try {
                     signature = decodeBase64(base64);
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
+                    ApproovLog.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
                     return request;
                 }
                 // decode the signature from ASN.1 DER format
@@ -270,7 +269,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                     signature = es256DerToRaw(signature);
                 } catch (Exception e) {
                     // Fail-open: a malformed install signature is logged and the request proceeds unsigned.
-                    Log.e(TAG, "Failed to decode ASN.1 DER ES256 signature - proceeding unsigned: " + e, e);
+                    ApproovLog.e(TAG, "Failed to decode ASN.1 DER ES256 signature - proceeding unsigned: " + e, e);
                     return request;
                 }
                 break;
@@ -281,17 +280,17 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 try {
                     base64 = getAccountMessageSignature(message);
                 } catch (ApproovException e) {
-                    Log.e(TAG, "Failed to get AccountMessageSignature - proceeding unsigned " + e);
+                    ApproovLog.e(TAG, "Failed to get AccountMessageSignature - proceeding unsigned " + e);
                     return request;
                 }
                 if (base64.isEmpty()) {
-                    Log.e(TAG, "AccountMessageSignature is empty - proceeding unsigned");
+                    ApproovLog.e(TAG, "AccountMessageSignature is empty - proceeding unsigned");
                     return request;
                 }
                 try {
                     signature = decodeBase64(base64);
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
+                    ApproovLog.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
                     return request;
                 }
                 break;
@@ -317,19 +316,19 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             request.setRequestProperty("Signature", sigHeader);
             request.setRequestProperty("Signature-Input", sigInputHeader);
 
-            Log.d(TAG, "Constructed Signature header: " + sigHeader);
-            Log.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
-            Log.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
+            ApproovLog.d(TAG, "Constructed Signature header: " + sigHeader);
+            ApproovLog.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
+            ApproovLog.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to serialize signature headers - proceeding unsigned " + e);
+            ApproovLog.e(TAG, "Failed to serialize signature headers - proceeding unsigned " + e);
             return request;
         }
 
         // Debugging - log the message and signature-related headers
         // WARNING never log the message in production code as it contains the Approov token which allows API access
-        // Log.d(TAG, "Message Value - Signature Message: " + message);
-        // Log.d(TAG, "Message Header - Signature: " + sigHeader);
-        // Log.d(TAG, "Message Header Signature-Input: " + sigInputHeader);
+        // ApproovLog.d(TAG, "Message Value - Signature Message: " + message);
+        // ApproovLog.d(TAG, "Message Header - Signature: " + sigHeader);
+        // ApproovLog.d(TAG, "Message Header Signature-Input: " + sigInputHeader);
 
         if (params.isDebugMode()) {
             try {
@@ -340,7 +339,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 String digestHeader = Dictionary.valueOf(digestMap).serialize();
                 request.setRequestProperty("Signature-Base-Digest", digestHeader);
             } catch (NoSuchAlgorithmException e) {
-                Log.d(TAG, "Failed to get digest algorithm - no debug entry " + e);
+                ApproovLog.d(TAG, "Failed to get digest algorithm - no debug entry " + e);
             }
         }
         return request;
