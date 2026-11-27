@@ -63,7 +63,7 @@ jobs:
       - name: Wire mini-SDK path for CI layout
         if: ${{ env.CORE_SERVICE_LAYERS_TESTING_PAT != '' }}
         run: |
-          echo "miniSdkAndroidRoot=${{ github.workspace }}/core-service-layers-testing/mini-sdk/android" \
+          echo "miniSdkAndroidRoot=${{ github.workspace }}/core-service-layers-testing/mini-sdk-3.7.0/android" \
             >> approov-service-httpsurlconn/local.properties
 
       # -----------------------------------------------------------------------
