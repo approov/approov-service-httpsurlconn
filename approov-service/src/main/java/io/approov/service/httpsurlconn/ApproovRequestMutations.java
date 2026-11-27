@@ -29,6 +29,46 @@ public class ApproovRequestMutations {
     private String traceIDHeaderKey;
     private byte[] bodyBytes;
 
+    // the values the layer set on the token and trace headers, which are put back if a callback changes them
+    private String tokenHeaderValue;
+    private String traceIDHeaderValue;
+
+    /**
+     * Gets the value the layer set on the Approov token header.
+     *
+     * @return the token header value, or null if the layer set none
+     */
+    String getTokenHeaderValue() {
+        return tokenHeaderValue;
+    }
+
+    /**
+     * Sets the value the layer set on the Approov token header.
+     *
+     * @param tokenHeaderValue is the token header value
+     */
+    void setTokenHeaderValue(String tokenHeaderValue) {
+        this.tokenHeaderValue = tokenHeaderValue;
+    }
+
+    /**
+     * Gets the value the layer set on the Approov TraceID header.
+     *
+     * @return the trace header value, or null if the layer set none
+     */
+    String getTraceIDHeaderValue() {
+        return traceIDHeaderValue;
+    }
+
+    /**
+     * Sets the value the layer set on the Approov TraceID header.
+     *
+     * @param traceIDHeaderValue is the trace header value
+     */
+    void setTraceIDHeaderValue(String traceIDHeaderValue) {
+        this.traceIDHeaderValue = traceIDHeaderValue;
+    }
+
 
     /**
      * Gets the header key used for the Approov token.

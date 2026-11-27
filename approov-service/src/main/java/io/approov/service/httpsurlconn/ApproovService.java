@@ -261,6 +261,7 @@ public class ApproovService {
         approovProtectionEnabled = false;
         lastARC = "";
         messageSignatureDeprecationLogged.set(false);
+        resetRestoreWarnings();
         pinningHostnameVerifier = null;
         proceedOnNetworkFail = false;
         useApproovStatusIfNoToken = false;
@@ -1262,10 +1263,12 @@ public class ApproovService {
         if (setTokenHeaderKey != null) {
             request.setRequestProperty(setTokenHeaderKey, setTokenHeaderValue);
             changes.setTokenHeaderKey(setTokenHeaderKey);
+            changes.setTokenHeaderValue(setTokenHeaderValue);
         }
         if (setTraceIDHeaderKey != null) {
             request.setRequestProperty(setTraceIDHeaderKey, setTraceIDHeaderValue);
             changes.setTraceIDHeaderKey(setTraceIDHeaderKey);
+            changes.setTraceIDHeaderValue(setTraceIDHeaderValue);
         }
 
         // we now deal with any header substitutions, which may require further fetches
@@ -1381,10 +1384,62 @@ public class ApproovService {
             return new ApproovBufferedHttpsURLConnection(request, preparedRequestData, querySubstitutionResult);
         }
 
-        return preparedRequestData.mutator.handleInterceptorProcessedRequest(
+        HttpsURLConnection processed = preparedRequestData.mutator.handleInterceptorProcessedRequest(
                 request,
                 preparedRequestData.changes
         );
+        // the token and trace headers are set by the layer, so a callback cannot drop or change them
+        restoreApproovHeaders(processed, preparedRequestData.changes);
+        return processed;
+    }
+
+    // true once the warning for a token or trace header that a callback changed is logged
+    private static final AtomicBoolean tokenRestoreLogged = new AtomicBoolean();
+    private static final AtomicBoolean traceRestoreLogged = new AtomicBoolean();
+
+    /**
+     * Puts back the token and trace headers the layer set on a request, if the processed request callback
+     * removed them or changed their values. The layer sets these headers independently of the mutator, so a
+     * mutator cannot drop them. The first time for each header in a process a warning is logged.
+     *
+     * @param request is the request the callback returned, or null
+     * @param changes are the mutations of the request, which hold the header names and values the layer set
+     */
+    static void restoreApproovHeaders(HttpsURLConnection request, ApproovRequestMutations changes) {
+        if ((request == null) || (changes == null))
+            return;
+        String[] names = {changes.getTokenHeaderKey(), changes.getTraceIDHeaderKey()};
+        String[] values = {changes.getTokenHeaderValue(), changes.getTraceIDHeaderValue()};
+        AtomicBoolean[] logged = {tokenRestoreLogged, traceRestoreLogged};
+        String[] kinds = {"token", "trace"};
+        for (int i = 0; i < names.length; i++) {
+            if ((names[i] == null) || (values[i] == null))
+                continue;
+            try {
+                if (values[i].equals(request.getRequestProperty(names[i])))
+                    continue;
+                request.setRequestProperty(names[i], values[i]);
+            } catch (IllegalStateException e) {
+                // the callback connected the request, so its headers can no longer be changed
+                ApproovLog.e(TAG, "handleInterceptorProcessedRequest: Approov " + kinds[i]
+                        + " header not restored, request already connected");
+                continue;
+            }
+            String message = "handleInterceptorProcessedRequest: removed or changed the Approov " + kinds[i]
+                    + " header, restored";
+            if (logged[i].compareAndSet(false, true))
+                ApproovLog.w(TAG, message);
+            else
+                ApproovLog.d(TAG, message);
+        }
+    }
+
+    /**
+     * Clears the once per process flags of the header restore warnings. This is for tests only.
+     */
+    static void resetRestoreWarnings() {
+        tokenRestoreLogged.set(false);
+        traceRestoreLogged.set(false);
     }
 
     // substituteQueryParams(URL) and substituteQueryParam(URL, String) were removed (Issue #14).

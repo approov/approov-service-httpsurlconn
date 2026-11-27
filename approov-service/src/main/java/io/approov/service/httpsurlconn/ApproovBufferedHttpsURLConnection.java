@@ -172,6 +172,8 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
                     this,
                     preparedRequestData.changes
             );
+            // the token and trace headers are set by the layer, so a callback cannot drop or change them
+            ApproovService.restoreApproovHeaders(processedRequest, preparedRequestData.changes);
             if ((processedRequest != null) && (processedRequest != this)) {
                 synchronizeFromReturnedRequest(processedRequest);
             }

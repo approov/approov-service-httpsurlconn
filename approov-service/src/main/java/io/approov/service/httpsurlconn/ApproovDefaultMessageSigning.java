@@ -369,6 +369,8 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         HttpsURLConnection processed = decisions().handleInterceptorProcessedRequest(request, changes);
         if (processed == null)
             return null;
+        // the layer's token and trace headers are put back before signing, so that the signature covers them
+        ApproovService.restoreApproovHeaders(processed, changes);
         return sign(processed, changes);
     }
 
