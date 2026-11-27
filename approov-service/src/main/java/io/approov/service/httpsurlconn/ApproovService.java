@@ -662,6 +662,77 @@ public class ApproovService {
     }
 
     /**
+     * Checks that Approov protection is enabled before a public method uses the Approov SDK, so that the
+     * SDK is not called before initialization or in bypass mode.
+     *
+     * @param method is the name of the public method, for the exception message
+     * @throws ApproovException if Approov protection is not enabled
+     */
+    private static void requireProtection(String method) throws ApproovException {
+        if (!isApproovProtectionEnabled()) {
+            ApproovLog.e(TAG, method + ": SDK not initialized");
+            throw new ApproovException(method + ": SDK not initialized");
+        }
+    }
+
+    /**
+     * Gets the current time in milliseconds since the epoch, adjusted to the Approov servers' clock. This
+     * is the device clock corrected by the offset the Approov SDK learns at each attestation, and before the
+     * first attestation it is the device clock. Message signatures take their created and expires times from
+     * it, so that a device whose clock is wrong still signs within the window your backend accepts. Use it for
+     * timestamps of your own that your backend compares with its clock. If the server time is not available,
+     * it is the device clock.
+     *
+     * @return the current time in milliseconds since the epoch, adjusted to the Approov servers' clock
+     * @throws ApproovException if Approov protection is not enabled or the SDK call fails
+     */
+    public static long getServerAdjustedCurrentTimeMS() throws ApproovException {
+        requireProtection("getServerAdjustedCurrentTimeMS");
+        try {
+            return sdkServerAdjustedTimeMS();
+        } catch (RuntimeException e) {
+            ApproovException wrapped = new ApproovException(e);
+            ApproovLog.e(TAG, "getServerAdjustedCurrentTimeMS: " + wrapped.getMessage());
+            throw wrapped;
+        }
+    }
+
+    /**
+     * Gets the time message signatures are stamped with, in milliseconds since the epoch: the server adjusted
+     * time while protection is enabled, so that a wrong device clock does not put created and expires outside
+     * the backend's window, and the device clock otherwise. A signature is never left out for want of it, so
+     * an SDK failure falls back to the device clock and is logged.
+     *
+     * @return the time for the created and expires signature parameters, in milliseconds since the epoch
+     */
+    static long signatureTimeMillis() {
+        if (isApproovProtectionEnabled()) {
+            try {
+                return sdkServerAdjustedTimeMS();
+            } catch (RuntimeException e) {
+                ApproovLog.w(TAG, "Message signing: server adjusted time unavailable, using the device clock: " + e);
+            }
+        }
+        return System.currentTimeMillis();
+    }
+
+    /**
+     * Gets the server adjusted time from the Approov SDK.
+     *
+     * @return the current time in milliseconds since the epoch, adjusted to the Approov servers' clock
+     * @throws RuntimeException as the SDK call throws it, such as an IllegalStateException before
+     *         initialization, or an IllegalStateException if the Approov SDK the app runs with is older than
+     *         the one the package is built against and does not have the method
+     */
+    private static long sdkServerAdjustedTimeMS() {
+        try {
+            return Approov.getServerAdjustedCurrentTimeMS();
+        } catch (LinkageError e) {
+            throw new IllegalStateException("Approov SDK has no getServerAdjustedCurrentTimeMS", e);
+        }
+    }
+
+    /**
      * Directly sets the data hash to be included in subsequently fetched Approov tokens. If the hash is
      * different from any previously set value then this will cause the next token fetch operation to
      * fetch a new token with the correct payload data hash. The hash appears in the

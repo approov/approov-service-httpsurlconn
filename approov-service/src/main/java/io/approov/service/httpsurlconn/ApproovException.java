@@ -30,4 +30,23 @@ public class ApproovException extends IOException {
     public ApproovException(String message) {
         super(message);
     }
+
+    /**
+     * Constructs an exception with an underlying cause.
+     *
+     * @param message is the basic information about the exception cause
+     * @param cause is the underlying cause of the exception
+     */
+    public ApproovException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    /**
+     * Constructs an exception with an underlying cause, using the cause message when available.
+     *
+     * @param cause is the underlying cause of the exception
+     */
+    public ApproovException(Throwable cause) {
+        super("Wrapped " + cause.getClass().getName() + ": " + cause.getMessage(), cause);
+    }
 }

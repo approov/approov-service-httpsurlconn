@@ -587,7 +587,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 requestParameters.setAlg(ALG_ES256);
             }
             if (addCreated || expiresLifetime > 0) {
-                long currentTime = System.currentTimeMillis() / 1000;
+                long currentTime = ApproovService.signatureTimeMillis() / 1000;
                 if (addCreated) {
                     requestParameters.setCreated(currentTime);
                 }
