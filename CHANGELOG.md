@@ -9,16 +9,24 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 Entries marked **Breaking** need a source change.
 
 ### Changed
+- **Breaking:** `initialize` passes every non-empty account ID and comment to the Approov SDK and the SDK decides, so the layer no longer compares account IDs itself. It resets the configuration each time, so make your configuration calls after it. It throws `IllegalArgumentException` for a null context, also in bypass mode (`""`).
 - **Breaking:** The message signing helper classes moved from `io.approov.util.http.sfv` and `io.approov.util.sig` to `io.approov.util.httpsurlconn.http.sfv` and `io.approov.util.httpsurlconn.sig`. Update imports of classes such as `SignatureParameters` and `ComponentProvider`.
 - Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
 - The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
 - A failed secure string fetch no longer fails the request under the standard mutators. The package skips the substitution and the request proceeds.
+- `getLastARC()` makes no token fetch of its own. It returns the ARC of the most recent token, secure string or custom JWT fetch, or an empty string.
+
+### Deprecated
+- `getMessageSignature(message)`. Use `getAccountMessageSignature`.
+- `setApproovHeader`, `setApproovTraceIDHeader`, `getApproovTokenHeader`, `getApproovTokenPrefix` and `getApproovTraceIDHeader`. Use `setTokenHeader(header, prefix)`, `setTraceIDHeader(header)`, `getTokenHeader()`, `getTokenPrefix()` and `getTraceIDHeader()`.
 
 ### Added
 - `ApproovServiceMutator.CLOSE_FAILURE`, the default, which keeps the 3.5.x token decisions, and `ALWAYS_PROCEED`, which never aborts a request on a token fetch failure.
+- The names shared by all Approov packages: `isApproovServiceEnabled()`, `isApproovProtectionEnabled()`, `setInstallAttributes(String)`, `getTokenHeader()`, `getTokenPrefix()`, `getTraceIDHeader()`, `setTokenHeader(header, prefix)` and `setTraceIDHeader(header)`.
 - `ApproovService.setLoggingLevel(ApproovLogLevel)`, `INFO` by default. `OFF` silences the layer, and debug logging for the `ApproovService` tag raises any other level to `DEBUG`. The package logs the loggable token at `DEBUG` only, with the URL without its query, user info or fragment.
 
 ### Removed
+- **Breaking:** `prefetch()`. The SDK manages prefetching itself.
 - BouncyCastle, which the package no longer bundles.
 
 ## [3.5.7] - 2026-11-27
