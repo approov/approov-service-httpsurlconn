@@ -1,4 +1,4 @@
-package io.approov.util.http.sfv;
+package io.approov.util.httpsurlconn.http.sfv;
 
 import java.util.Map;
 import java.util.Objects;

@@ -37,12 +37,12 @@ import java.util.Map;
 
 import javax.net.ssl.HttpsURLConnection;
 
-import io.approov.util.http.sfv.ByteSequenceItem;
-import io.approov.util.http.sfv.Dictionary;
-import io.approov.util.http.sfv.ListElement;
-import io.approov.util.sig.ComponentProvider;
-import io.approov.util.sig.SignatureBaseBuilder;
-import io.approov.util.sig.SignatureParameters;
+import io.approov.util.httpsurlconn.http.sfv.ByteSequenceItem;
+import io.approov.util.httpsurlconn.http.sfv.Dictionary;
+import io.approov.util.httpsurlconn.http.sfv.ListElement;
+import io.approov.util.httpsurlconn.sig.ComponentProvider;
+import io.approov.util.httpsurlconn.sig.SignatureBaseBuilder;
+import io.approov.util.httpsurlconn.sig.SignatureParameters;
 import okio.ByteString;
 
 

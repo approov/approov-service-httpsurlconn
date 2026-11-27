@@ -26,8 +26,8 @@ import java.util.Base64;
 
 import javax.net.ssl.HttpsURLConnection;
 
-import io.approov.util.sig.ComponentProvider;
-import io.approov.util.sig.SignatureParameters;
+import io.approov.util.httpsurlconn.sig.ComponentProvider;
+import io.approov.util.httpsurlconn.sig.SignatureParameters;
 
 public class ApproovServiceTest {
     private static final String CONFIG = "config";

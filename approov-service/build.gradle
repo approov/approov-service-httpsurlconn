@@ -150,8 +150,8 @@ tasks.register('verifyReleaseAar') {
                     'io/approov/service/httpsurlconn/ApproovService.class',
                     'io/approov/service/httpsurlconn/ApproovDefaultMessageSigning.class',
                     'io/approov/util/httpsurlconn/tink/subtle/EllipticCurves.class',
-                    'io/approov/util/http/sfv/Parser.class',
-                    'io/approov/util/sig/SignatureBaseBuilder.class'
+                    'io/approov/util/httpsurlconn/http/sfv/Parser.class',
+                    'io/approov/util/httpsurlconn/sig/SignatureBaseBuilder.class'
             ] as Set
             // anything bundled from a library must be relocated under this layer's own
             // prefix so that it cannot collide with an app's own copy or another Approov layer
@@ -175,7 +175,7 @@ tasks.register('verifyReleaseAar') {
                             assert !entry.name.startsWith(prefix): "AAR ${jar.name} bundles ${what} class ${entry.name}"
                         }
                         if (entry.name.endsWith('.class')) {
-                            assert entry.name.startsWith('io/approov/service/httpsurlconn/') || entry.name.startsWith('io/approov/util/'):
+                            assert entry.name.startsWith('io/approov/service/httpsurlconn/') || entry.name.startsWith('io/approov/util/httpsurlconn/'):
                                     "AAR ${jar.name} bundles class ${entry.name} outside this layer's packages"
                         }
                     }
