@@ -411,11 +411,15 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         SignatureParameters params;
         try {
             params = buildSignatureParameters(provider, changes);
-        } catch (IllegalStateException e) {
-            // Deliberate fail-closed conditions (a required body digest that cannot be generated,
-            // or unconfigured base parameters) must surface via the documented ApproovException
-            // contract of addApproov(...), not as a raw unchecked exception.
+        } catch (RequiredBodyDigestException e) {
+            // a required body digest that cannot be generated is the deliberate fail-closed condition, and it
+            // surfaces through the documented ApproovException contract of addApproov
             throw new ApproovException(e.getMessage(), e);
+        } catch (RuntimeException e) {
+            // Fail-open: any other failure to build the parameters, such as from a custom factory, leaves the
+            // request unsigned as the backend is the enforcement point
+            ApproovLog.e(TAG, "Message signing: failed to build signature parameters, proceeding unsigned: " + e);
+            return request;
         }
         if (params == null) {
             // No sig to be added to the request; return the original request.
@@ -897,7 +901,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             }
             if (bodyDigestAlgorithm != null) {
                 if (!generateBodyDigest(provider, requestParameters, changes.getBodyBytes()) && bodyDigestRequired) {
-                    throw new IllegalStateException("Failed to create required body digest");
+                    throw new RequiredBodyDigestException("Message signing: required body digest not generated");
                 }
             }
             return requestParameters;
@@ -905,22 +909,34 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
     }
 
     /**
+     * Thrown by a SignatureParametersFactory when a body digest configured as required cannot be generated.
+     * This is the one failure to build the signature parameters that fails the request closed, as an
+     * ApproovException with this as its cause. Any other failure leaves the request unsigned.
+     */
+    public static class RequiredBodyDigestException extends IllegalStateException {
+        /**
+         * Constructs an exception due to a required body digest that cannot be generated.
+         *
+         * @param message is the basic information about the exception cause
+         */
+        public RequiredBodyDigestException(String message) {
+            super(message);
+        }
+    }
+
+    /**
      * HttpsURLConnectionComponentProvider adapts a {@link HttpsURLConnection}
      * request to the generic signature ComponentProvider interface. Every
-     * component is derived from the connection's java.net.URL as the stack sends
-     * it, which is never parsed again with java.net.URI, as that encodes some
-     * characters differently and rejects some URLs the stack sends.
-     * <p>
-     * Some derived components deliberately deviate from a strict reading of RFC 9421 so that all Approov
-     * service layers produce identical signature bases for the Approov verifier:
+     * component is derived from the request URL in the form that Android sends it, as OkHttp's HttpUrl
+     * parses it, and the URL is never parsed with java.net.URI, as that encodes some characters differently
+     * and rejects some URLs that are sent.
      * <ul>
      * <li>{@code @authority} is the lowercase host and a non-default port; a default port is left out
      * (RFC 9421 section 2.2.3);</li>
      * <li>{@code @target-uri} is the request URL without any fragment, which is never sent, and without an
      * explicit default port (RFC 9421 section 2.2.2);</li>
-     * <li>{@code @query} has no leading {@code ?} and is unavailable when the URL has
-     * no query (RFC 9421 section 2.2.7 includes the {@code ?} and uses {@code ?} alone
-     * for an absent query).</li>
+     * <li>{@code @query} has its leading {@code ?}, and is {@code ?} alone for a URL with no query (RFC 9421
+     * section 2.2.7).</li>
      * </ul>
      */
     protected static final class HttpsURLConnectionComponentProvider implements ComponentProvider {

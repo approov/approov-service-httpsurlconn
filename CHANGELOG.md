@@ -25,6 +25,9 @@ Entries marked **Breaking** need a source change.
 - The package signs the URL in the normalized form that Android sends. Android percent-encodes some characters, such as `|` or a space in the path and characters that are not ASCII, and keeps existing escapes. If the package cannot parse a URL, it sends the request unsigned and logs one error.
 - The signed `@query` starts with `?`, and is `?` alone for a URL with no query, as RFC 9421 requires. The signed `@query-param` value uses the form encoding of RFC 9421.
 - A signature covers each component once, also when the token header is one of the optional headers of the factory.
+- Only a required body digest that cannot be generated fails a request closed, as an `ApproovException` with a `RequiredBodyDigestException` cause. Any other failure to build the signature parameters sends the request unsigned and logs an error. Examples are missing base parameters and an exception from your own factory.
+- A request that `addApproovToConnection` buffers looks up its headers without regard to case, as `HttpURLConnection` does. A message signature over a request with a body covers the header values that the package sends.
+- A structured field decimal keeps the leading zeros of its fraction, so `1.05` stays `1.05`.
 - An unsupported message signing algorithm fails the request with `ApproovException`, where 3.5.x threw `IllegalStateException`.
 
 ### Deprecated
@@ -36,6 +39,7 @@ Entries marked **Breaking** need a source change.
 - Message signing can produce the account signature as well as the install signature: `SignatureParametersFactory.setUseInstallAndAccountMessageSigning()`.
 - `ApproovServiceMutator.CLOSE_FAILURE`, the default, which keeps the 3.5.x token decisions, and `ALWAYS_PROCEED`, which never aborts a request on a token fetch failure.
 - `ApproovService.getServerAdjustedCurrentTimeMS()`, the current time corrected to the Approov servers' clock. Message signatures take their `created` and `expires` times from it. If the server time is not available, the package uses the device clock and logs a warning.
+- `ApproovDefaultMessageSigning.RequiredBodyDigestException`, which a factory throws when a required body digest cannot be generated.
 - `ApproovException(String, Throwable)` and `ApproovException(Throwable)`, which keep the original exception as the cause.
 - The names shared by all Approov packages: `isApproovServiceEnabled()`, `isApproovProtectionEnabled()`, `setInstallAttributes(String)`, `getTokenHeader()`, `getTokenPrefix()`, `getTraceIDHeader()`, `setTokenHeader(header, prefix)` and `setTraceIDHeader(header)`.
 - `ApproovService.setLoggingLevel(ApproovLogLevel)`, `INFO` by default. `OFF` silences the layer, and debug logging for the `ApproovService` tag raises any other level to `DEBUG`. The package logs the loggable token at `DEBUG` only, with the URL without its query, user info or fragment.

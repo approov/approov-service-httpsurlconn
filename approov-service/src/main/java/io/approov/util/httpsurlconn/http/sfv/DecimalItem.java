@@ -83,13 +83,19 @@ public class DecimalItem implements NumberItem<BigDecimal> {
         long left = abs / 1000;
         long right = abs % 1000;
 
-        if (right % 10 == 0) {
-            right /= 10;
+        // the fractional part is always three digits because of the implied divisor of
+        // 1000, so serialize it zero-padded and then strip trailing zeros, keeping at
+        // least one digit
+        char[] frac = {
+                (char) ('0' + right / 100),
+                (char) ('0' + (right / 10) % 10),
+                (char) ('0' + right % 10)
+        };
+        int fracLen = frac.length;
+        while (fracLen > 1 && frac[fracLen - 1] == '0') {
+            fracLen -= 1;
         }
-        if (right % 10 == 0) {
-            right /= 10;
-        }
-        sb.append(sign).append(left).append('.').append(right);
+        sb.append(sign).append(left).append('.').append(frac, 0, fracLen);
 
         params.serializeTo(sb);
 
