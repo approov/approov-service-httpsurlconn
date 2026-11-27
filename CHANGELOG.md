@@ -11,16 +11,22 @@ Entries marked **Breaking** need a source change.
 ### Changed
 - **Breaking:** `initialize` passes every non-empty account ID and comment to the Approov SDK and the SDK decides, so the layer no longer compares account IDs itself. It resets the configuration each time, so make your configuration calls after it. It throws `IllegalArgumentException` for a null context, also in bypass mode (`""`).
 - **Breaking:** The message signing helper classes moved from `io.approov.util.http.sfv` and `io.approov.util.sig` to `io.approov.util.httpsurlconn.http.sfv` and `io.approov.util.httpsurlconn.sig`. Update imports of classes such as `SignatureParameters` and `ComponentProvider`.
+- **Breaking:** `SignatureParametersFactory` has a new protected field, `useInstallMessageSigning`, which starts `true`. Its parameters no longer set the algorithm, because the signer produces one signature for each algorithm that the factory selects. A subclass that sets `useAccountMessageSigning = true` directly now produces both signatures. Call `setUseAccountMessageSigning()` to produce the account signature only.
 - Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
 - The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
 - A failed secure string fetch no longer fails the request under the standard mutators. The package skips the substitution and the request proceeds.
 - `getLastARC()` makes no token fetch of its own. It returns the ARC of the most recent token, secure string or custom JWT fetch, or an empty string.
+- The package logs a missing install or account signature as a warning once per process. It logs a request that it sends unsigned as an error once per process. It logs later occurrences at debug level.
+- The signed `@target-uri` leaves out an explicit default port (`:443` for `https`, `:80` for `http`) and any `#fragment`. The signed `@authority` is the lowercase host with a non-default port. The signature uses the path `/` for a URL with no path. The package no longer reads the URL with `java.net.URI`. A host factory matches the host name without regard to case and without a port.
+- An unsupported message signing algorithm fails the request with `ApproovException`, where 3.5.x threw `IllegalStateException`.
 
 ### Deprecated
 - `getMessageSignature(message)`. Use `getAccountMessageSignature`.
 - `setApproovHeader`, `setApproovTraceIDHeader`, `getApproovTokenHeader`, `getApproovTokenPrefix` and `getApproovTraceIDHeader`. Use `setTokenHeader(header, prefix)`, `setTraceIDHeader(header)`, `getTokenHeader()`, `getTokenPrefix()` and `getTraceIDHeader()`.
 
 ### Added
+- `ApproovDefaultMessageSigning.combined()` and `combined(ApproovServiceMutator decisions)` give a signer that adds both the install and the account signature and makes the decisions you pass, for example `ApproovDefaultMessageSigning.combined(ApproovServiceMutator.ALWAYS_PROCEED)`.
+- Message signing can produce the account signature as well as the install signature: `SignatureParametersFactory.setUseInstallAndAccountMessageSigning()`.
 - `ApproovServiceMutator.CLOSE_FAILURE`, the default, which keeps the 3.5.x token decisions, and `ALWAYS_PROCEED`, which never aborts a request on a token fetch failure.
 - `ApproovService.getServerAdjustedCurrentTimeMS()`, the current time corrected to the Approov servers' clock. Message signatures take their `created` and `expires` times from it. If the server time is not available, the package uses the device clock and logs a warning.
 - `ApproovException(String, Throwable)` and `ApproovException(Throwable)`, which keep the original exception as the cause.
