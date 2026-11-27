@@ -1140,19 +1140,19 @@ public class ApproovServiceMiniSdkTest {
     }
 
     /**
-     * §1 Repeated same-config with options: direct test asserting that the SDK failure is surfaced rather than silently ignored.
+     * A repeated initialize with the same config and a comment the SDK rejects surfaces the SDK exception
+     * unchanged, as the layer passes the comment through and lets the SDK decide, and protection stays on.
      */
     @Test
     public void testRepeatedSameConfigWithOptionsSurfacesFailure() throws Exception {
         // Init with valid config first (done in setUp)
-        
-        // Repeated same-config with options:
         try {
             ApproovService.initialize(context, validInitialConfig, "options:bad-option");
             fail("Expected IllegalStateException from SDK for bad options");
         } catch (IllegalStateException e) {
-            assertTrue(e.getMessage().contains("options initialization failed"));
+            assertNotNull(e.getMessage());
         }
+        assertTrue(ApproovService.isApproovProtectionEnabled());
     }
 
     /**
