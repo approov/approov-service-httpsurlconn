@@ -15,6 +15,8 @@ Entries marked **Breaking** need a source change.
 - Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
 - The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
 - A failed secure string fetch no longer fails the request under the standard mutators. The package skips the substitution and the request proceeds.
+- The package matches pins against the certificate chain that the platform validated. A pin matches the host without regard to case and with one trailing dot ignored.
+- If the SDK cannot supply the pins, connections continue on OS trust and the package logs one error.
 - `ApproovRejectionException` is now a subclass of `ApproovFetchStatusException` with the status `REJECTED`, so a handler for `ApproovFetchStatusException` catches it. Its constructor and getters stay the same.
 - Your `handleInterceptorProcessedRequest` hook cannot change the token or trace header that the package set. The package puts the header back and logs a warning once per process. A message signature covers the header that the package set.
 - `getLastARC()` makes no token fetch of its own. It returns the ARC of the most recent token, secure string or custom JWT fetch, or an empty string.

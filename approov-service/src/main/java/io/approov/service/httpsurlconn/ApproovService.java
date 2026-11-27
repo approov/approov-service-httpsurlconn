@@ -24,39 +24,17 @@ import com.criticalblue.approovsdk.Approov;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.lang.reflect.Method;
-import java.security.PublicKey;
-import java.security.KeyStore;
-import java.security.cert.Certificate;
-import java.security.cert.CertPath;
-import java.security.cert.CertPathValidator;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
-import java.security.cert.PKIXCertPathValidatorResult;
-import java.security.cert.PKIXParameters;
-import java.security.cert.TrustAnchor;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-
-import okio.ByteString;
 
 // ApproovService provides a mediation layer to the Approov SDK itself
 public class ApproovService {
@@ -262,6 +240,7 @@ public class ApproovService {
         lastARC = "";
         messageSignatureDeprecationLogged.set(false);
         resetRestoreWarnings();
+        PinningHostnameVerifier.resetWarnings();
         pinningHostnameVerifier = null;
         proceedOnNetworkFail = false;
         useApproovStatusIfNoToken = false;
@@ -273,6 +252,22 @@ public class ApproovService {
         substitutionHeaders = null;
         exclusionURLRegexs = null;
         ApproovLog.setLevel(ApproovLogLevel.INFO);
+    }
+
+    /**
+     * Normalizes a host for comparison with the keys of the SDK pin set: lowercase, without one trailing
+     * dot and without the brackets of an IPv6 address.
+     *
+     * @param host is the host
+     * @return the normalized host
+     */
+    static String normalizeHost(String host) {
+        String normalized = host.toLowerCase(Locale.ROOT);
+        if (normalized.endsWith("."))
+            normalized = normalized.substring(0, normalized.length() - 1);
+        if (normalized.startsWith("[") && normalized.endsWith("]"))
+            normalized = normalized.substring(1, normalized.length() - 1);
+        return normalized;
     }
 
     /**
@@ -1447,158 +1442,3 @@ public class ApproovService {
     // openConnection(); see USAGE.md ("Substituting Query Parameters").
 }
 
-/**
- * Performs pinning for use with HttpsUrlConnection. This implementation of HostnameVerifier is
- * intended to enhance the HostnameVerifier your TLS implementation normally uses. The
- * HostnameVerifier passed into the constructor continues to be executed when verify is called. The
- * is only applied if the usual HostnameVerifier first passes (so this implementation can only be
- * more secure). This pins to the SHA256 of the public key hash of any certificate in the trust
- * chain for the host (so technically this is public key rather than certificate pinning). Note that
- * this uses the current live Approov pins so is immediately updated if there is a configuration
- * update to the app.
- */
-final class PinningHostnameVerifier implements HostnameVerifier {
-
-    // HostnameVerifier you would normally be using
-    private final HostnameVerifier delegate;
-
-    // trust anchors used to resolve the validated root certificate when it is not
-    // present in the peer chain
-    private final Set<TrustAnchor> trustAnchors;
-
-    // Tag for log messages
-    private static final String TAG = "ApproovPinVerifier";
-
-    /**
-     * Construct a PinningHostnameVerifier which delegates
-     * the initial verify to a user defined HostnameVerifier before
-     * applying pinning on top.
-     *
-     * @param delegate is the HostnameVerifier to apply before the custom pinning
-     */
-    public PinningHostnameVerifier(HostnameVerifier delegate) {
-        this.delegate = delegate;
-        this.trustAnchors = getDefaultTrustAnchors();
-    }
-
-    /**
-     * Gets the platform default trust anchors so we can validate the peer chain and
-     * identify the resolved trust root when it is not included in the TLS peer
-     * certificates.
-     */
-    private Set<TrustAnchor> getDefaultTrustAnchors() {
-        try {
-            TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            trustManagerFactory.init((KeyStore) null);
-            Set<TrustAnchor> anchors = new HashSet<>();
-            for (TrustManager trustManager : trustManagerFactory.getTrustManagers()) {
-                if (trustManager instanceof X509TrustManager) {
-                    for (X509Certificate cert : ((X509TrustManager) trustManager).getAcceptedIssuers())
-                        anchors.add(new TrustAnchor(cert, null));
-                }
-            }
-            return anchors;
-        } catch (Exception e) {
-            ApproovLog.e(TAG, "Unable to initialize default trust anchors", e);
-            return Collections.emptySet();
-        }
-    }
-
-    /**
-     * Hashes a public key using the Approov pinning format.
-     */
-    private String hashPublicKey(PublicKey publicKey) {
-        ByteString digest = ByteString.of(publicKey.getEncoded()).sha256();
-        return digest.base64();
-    }
-
-    /**
-     * Validates the peer chain with PKIX and returns the resolved trust anchor
-     * certificate if one is available as a certificate object.
-     */
-    private X509Certificate getTrustAnchorCertificate(SSLSession session) {
-        if (trustAnchors.isEmpty())
-            return null;
-
-        try {
-            List<X509Certificate> peerCertificates = new ArrayList<>();
-            for (Certificate cert : session.getPeerCertificates()) {
-                if (cert instanceof X509Certificate)
-                    peerCertificates.add((X509Certificate) cert);
-            }
-            if (peerCertificates.isEmpty())
-                return null;
-
-            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            CertPath certPath = certificateFactory.generateCertPath(peerCertificates);
-            CertPathValidator validator = CertPathValidator.getInstance("PKIX");
-            PKIXParameters pkixParameters = new PKIXParameters(trustAnchors);
-            pkixParameters.setRevocationEnabled(false);
-            PKIXCertPathValidatorResult result = (PKIXCertPathValidatorResult) validator.validate(certPath, pkixParameters);
-            return result.getTrustAnchor().getTrustedCert();
-        } catch (CertificateException e) {
-            ApproovLog.e(TAG, "Unable to validate certificate chain", e);
-        } catch (SSLException e) {
-            ApproovLog.e(TAG, "Unable to read peer certificate chain", e);
-        } catch (Exception e) {
-            ApproovLog.e(TAG, "Unable to resolve trust anchor", e);
-        }
-        return null;
-    }
-
-    @Override
-    public boolean verify(String hostname, SSLSession session) {
-        if (!ApproovService.isApproovEnabled()) {
-            // Bypass mode: skip Approov pinning, but still apply standard hostname
-            // verification via the OS/default verifier — never blindly accept.
-            return delegate.verify(hostname, session);
-        }
-        // check the delegate function first and only proceed if it passes
-        if (delegate.verify(hostname, session)) try {
-            // extract the set of valid pins for the hostname
-            Set<String> hostPins = new HashSet<>();
-            Map<String, List<String>> allPins = Approov.getPins("public-key-sha256");
-            List<String> pins = allPins.get(hostname);
-            if ((pins != null) && pins.isEmpty())
-                // if there are no pins associated with the hostname domain then we use any pins
-                // associated with the "*" domain for managed trust roots (note we do not
-                // apply this to domains that are not added at all)
-                pins = allPins.get("*");
-            if (pins != null) {
-                // convert the list of pins into a set
-                for (String pin: pins)
-                    hostPins.add(pin);
-            }
-
-            // if there are no pins then we accept any certificate
-            if (hostPins.isEmpty())
-                return true;
-
-            // check to see if any of the pins are in the certificate chain
-            for (Certificate cert: session.getPeerCertificates()) {
-                if (cert instanceof X509Certificate) {
-                    X509Certificate x509Cert = (X509Certificate) cert;
-                    String hash = hashPublicKey(x509Cert.getPublicKey());
-                    if (hostPins.contains(hash))
-                        return true;
-                }
-                else
-                    ApproovLog.e(TAG, "Certificate not X.509");
-            }
-
-            // If the validated trust anchor/root was not presented by the peer, resolve it
-            // from the platform trust store and check its public key hash too.
-            X509Certificate trustAnchorCert = getTrustAnchorCertificate(session);
-            if ((trustAnchorCert != null) && hostPins.contains(hashPublicKey(trustAnchorCert.getPublicKey())))
-                return true;
-
-            // the connection is rejected
-            ApproovLog.w(TAG, "Pinning rejection for " + hostname);
-            return false;
-        } catch (SSLException e) {
-            ApproovLog.e(TAG, "Delegate Exception");
-            throw new RuntimeException(e);
-        }
-        return false;
-    }
-}
