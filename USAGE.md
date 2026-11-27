@@ -79,12 +79,13 @@ ApproovService.setServiceMutator(ApproovServiceMutator.ALWAYS_PROCEED);
 | Token fetch status | `CLOSE_FAILURE` (default) | `ALWAYS_PROCEED` |
 | :--- | :--- | :--- |
 | `SUCCESS` | proceeds with the token and any trace ID | same |
-| `UNKNOWN_URL`, `UNPROTECTED_URL` | proceeds with no Approov headers | same |
+| `UNKNOWN_URL` | proceeds with no Approov headers | same |
+| `UNPROTECTED_URL` (a secrets-only API) | proceeds with no token header, and with its secure string headers | same |
 | `NO_APPROOV_SERVICE` | proceeds with an empty token header (or the status) and any trace ID | same |
 | `NO_NETWORK`, `POOR_NETWORK`, `MITM_DETECTED` | throws `ApproovNetworkException`, which your app can let the user retry | proceeds with an empty token header (or the status) and any trace ID |
 | any other status | throws `ApproovFetchStatusException` | proceeds with an empty token header (or the status) and any trace ID |
 
-"The status" means the fetch status name, such as `NO_NETWORK`, in the token header after any prefix. Turn this on with `setUseApproovStatusIfNoToken(true)`. Under `CLOSE_FAILURE`, this also lets the network failures proceed with the status in the token header. `setProceedOnNetworkFail(true)` lets them proceed with no Approov headers.
+"The status" means the fetch status name, such as `NO_NETWORK`, in the token header after any prefix. Turn this on with `setUseApproovStatusIfNoToken(true)`. Under `CLOSE_FAILURE`, this also lets the network failures proceed with the status in the token header. The deprecated `setProceedOnNetworkFail(true)` lets them proceed with no Approov headers.
 
 Under both standard mutators, a secure string that the package cannot fetch does not fail the request. The header keeps the value that your app set, and the request goes ahead.
 
@@ -204,6 +205,8 @@ ApproovService.addSubstitutionHeader("Api-Key", null);              // the whole
 ApproovService.addSubstitutionHeader("Authorization", "Bearer ");   // the value after the prefix is the key
 ```
 
+The package substitutes these headers on requests to your token-protected API domains and to your secrets-only API domains. A secrets-only API has no token header.
+
 Call `addSubstitutionHeader` after an `initialize` with your account ID. Before that, and in bypass mode, it does nothing.
 
 ### Secure strings in query parameters
@@ -235,6 +238,8 @@ Pinning still applies to an excluded request. Use exclusions with caution. A req
 
 A domain with no pins of its own uses the [Managed Trust Roots](https://docs.approov.io/security-configuration/dynamic-pinning/#managed-trust-roots). If there are none, the domain uses OS trust only, and the package logs a warning. If the SDK cannot supply the pins, the connection continues on OS trust and the package logs one error. Before `initialize` and in bypass mode, the package does not pin.
 
+The verifier checks the pins when a connection opens. So `addApproov` sets `Connection: close` on each pinned request, and each request opens its own connection. If your app sets its own `Connection` header, the package keeps it.
+
 To turn off Approov pinning for some requests, override `handlePinningShouldProcessRequest` in your mutator:
 
 ```java
@@ -243,6 +248,10 @@ public boolean handlePinningShouldProcessRequest(HttpURLConnection request) {
     return !request.getURL().getHost().equals("cdn.example.com");
 }
 ```
+
+## Redirects
+
+A request that carries a header that the package added, such as the token header or a secure string, does not follow redirects by itself. Otherwise the platform sends those headers to the new location. Your app receives the redirect response. To follow it, read the `Location` header and send a new request to that URL with `addApproov`. The package then adds only what is correct for the new location. A request without such headers follows redirects as before.
 
 ## Logging and diagnostics
 

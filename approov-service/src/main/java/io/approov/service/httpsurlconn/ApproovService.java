@@ -292,13 +292,16 @@ public class ApproovService {
      * Sets a flag indicating if request preparation should proceed anyway if it is
      * not possible to obtain an Approov token due to a networking failure. If this is set
      * then your backend API can receive calls without the expected Approov token header
-     * being added, or without header/query parameter substitutions being made. Note that
+     * being added, or without header substitutions being made. Note that
      * this should be used with caution because it may allow a request to be established
      * before any dynamic pins have been received via Approov, thus potentially opening
      * the channel to a MitM.
      *
      * @param proceed is true if Approov networking fails should allow continuation
+     * @deprecated Use ApproovServiceMutator.ALWAYS_PROCEED, or setUseApproovStatusIfNoToken(true) to send the
+     *             token fetch status in the token header.
      */
+    @Deprecated
     public static synchronized void setProceedOnNetworkFail(boolean proceed) {
         ApproovLog.d(TAG, "setProceedOnNetworkFail " + proceed);
         proceedOnNetworkFail = proceed;
@@ -1196,6 +1199,11 @@ public class ApproovService {
             // ensure the request is pinned even if the request later turns out to be
             // excluded from Approov token processing
             request.setHostnameVerifier(pinningHostnameVerifier);
+
+            // the pins are checked when a connection is opened, so the request asks for its own connection
+            // rather than reusing a pooled one, unless the app set its own Connection header
+            if (request.getRequestProperty("Connection") == null)
+                request.setRequestProperty("Connection", "close");
         }
 
         // first check if we are to proceed with any Approov processing
@@ -1247,13 +1255,15 @@ public class ApproovService {
                 setTraceIDHeaderKey = traceIDHeader;
                 setTraceIDHeaderValue = traceID;
             }
-        } else {
+        } else if (approovResults.getStatus() != Approov.TokenFetchStatus.UNPROTECTED_URL) {
             // we only continue additional processing if we had a valid status from
             // Approov, to prevent additional delays by trying to fetch from Approov
             // again and this also protects against header substitutions in domains not
             // protected by Approov and therefore potentially subject to a MitM
             return new PreparedRequestData(mutator, changes, false);
         }
+        // a secrets-only API (UNPROTECTED_URL) gets no token header, but its secure strings are substituted as
+        // it is a protected channel
 
         if (setTokenHeaderKey != null) {
             request.setRequestProperty(setTokenHeaderKey, setTokenHeaderValue);
@@ -1291,7 +1301,15 @@ public class ApproovService {
             changes.setSubstitutionHeaderKeys(new ArrayList<>(setSubstitutionHeaders.keySet()));
         }
 
-        return new PreparedRequestData(mutator, changes, true);
+        // a request that carries headers the package added does not follow redirects by itself, as the
+        // platform would send those headers to the new location, so the app follows a redirect with a new
+        // connection that is protected again
+        boolean headersAdded = (setTokenHeaderKey != null) || (setTraceIDHeaderKey != null)
+                || !setSubstitutionHeaders.isEmpty();
+        if (headersAdded)
+            request.setInstanceFollowRedirects(false);
+
+        return new PreparedRequestData(mutator, changes, setTokenHeaderKey != null);
     }
 
     /**

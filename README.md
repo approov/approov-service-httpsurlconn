@@ -129,6 +129,7 @@ Read the [changelog](CHANGELOG.md) for the full list of changes. Test your app a
 * The message signing helper classes moved. Change imports of `io.approov.util.sig.*` to `io.approov.util.httpsurlconn.sig.*`, and `io.approov.util.http.sfv.*` to `io.approov.util.httpsurlconn.http.sfv.*`.
 * A `SignatureParametersFactory` subclass that sets `useAccountMessageSigning = true` directly now produces both the install and the account signature. To keep the account signature only, call `setUseAccountMessageSigning()`. The factory no longer sets the algorithm on the parameters. A subclass that needs one signature only sets the algorithm on the parameters that it returns.
 * This release removes `prefetch()`. Remove your calls to it. The SDK manages prefetching itself.
+* A request that carries a header that the package added no longer follows redirects by itself. If your app relies on redirects, read the `Location` header of a redirect response and send a new request with `addApproov`. See [redirects](USAGE.md#redirects).
 
 If you upgrade from a release before 3.5.7, also remove your calls to the query parameter substitution methods, which 3.5.7 removed. See [secure strings in query parameters](USAGE.md#secure-strings-in-query-parameters).
 

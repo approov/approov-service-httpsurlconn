@@ -10,10 +10,13 @@ Entries marked **Breaking** need a source change. See [Upgrading from 3.5.x](REA
 
 ### Changed
 - **Breaking:** `initialize` passes every non-empty account ID and comment to the Approov SDK and the SDK decides, so the layer no longer compares account IDs itself. It resets the configuration each time, so make your configuration calls after it. It throws `IllegalArgumentException` for a null context, also in bypass mode (`""`).
+- **Breaking:** A request that carries a header that the package added does not follow redirects by itself. Thus the platform does not send those headers to another location. Follow a redirect with a new request and `addApproov`. See [redirects](USAGE.md#redirects).
 - **Breaking:** The message signing helper classes moved from `io.approov.util.http.sfv` and `io.approov.util.sig` to `io.approov.util.httpsurlconn.http.sfv` and `io.approov.util.httpsurlconn.sig`. Update imports of classes such as `SignatureParameters` and `ComponentProvider`.
 - **Breaking:** `SignatureParametersFactory` has a new protected field, `useInstallMessageSigning`, which starts `true`. Its parameters no longer set the algorithm, because the signer produces one signature for each algorithm that the factory selects. A subclass that sets `useAccountMessageSigning = true` directly now produces both signatures. Call `setUseAccountMessageSigning()` to produce the account signature only.
 - Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
 - The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
+- The package substitutes secure string headers on requests to secrets-only API domains as well as on token-protected ones. A secrets-only API has no token header.
+- Each request that the package pins sets `Connection: close`, so that it opens its own connection and the pins apply to it. A `Connection` header that your app sets stays.
 - A failed secure string fetch no longer fails the request under the standard mutators. The package skips the substitution and the request proceeds.
 - The package matches pins against the certificate chain that the platform validated. A pin matches the host without regard to case and with one trailing dot ignored.
 - If the SDK cannot supply the pins, connections continue on OS trust and the package logs one error.
@@ -31,6 +34,7 @@ Entries marked **Breaking** need a source change. See [Upgrading from 3.5.x](REA
 - An unsupported message signing algorithm fails the request with `ApproovException`, where 3.5.x threw `IllegalStateException`.
 
 ### Deprecated
+- `setProceedOnNetworkFail` and `getProceedOnNetworkFail`. Use `ApproovServiceMutator.ALWAYS_PROCEED`, or `setUseApproovStatusIfNoToken(true)`.
 - `getMessageSignature(message)`. Use `getAccountMessageSignature`.
 - `setApproovHeader`, `setApproovTraceIDHeader`, `getApproovTokenHeader`, `getApproovTokenPrefix` and `getApproovTraceIDHeader`. Use `setTokenHeader(header, prefix)`, `setTraceIDHeader(header)`, `getTokenHeader()`, `getTokenPrefix()` and `getTraceIDHeader()`.
 

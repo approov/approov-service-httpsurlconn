@@ -1,6 +1,7 @@
 package io.approov.service.httpsurlconn;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
@@ -148,18 +149,43 @@ public class SecureStringSubstitutionTest {
     }
 
     @Test
-    public void noSecureStringIsFetchedWhenTheTokenDecisionSendsNoHeaderOrAborts() throws Exception {
-        for (Approov.TokenFetchStatus status : new Approov.TokenFetchStatus[] {
-                Approov.TokenFetchStatus.UNKNOWN_URL, Approov.TokenFetchStatus.UNPROTECTED_URL}) {
-            answerToken(status);
-            assertEquals(status.name(), "Bearer " + PLACEHOLDER, send("Bearer " + PLACEHOLDER).getRequestProperty("Api-Key"));
-        }
+    public void noSecureStringIsFetchedForAnUnknownURLOrWhenTheTokenDecisionAborts() throws Exception {
+        answerToken(Approov.TokenFetchStatus.UNKNOWN_URL);
+        assertEquals("Bearer " + PLACEHOLDER, send("Bearer " + PLACEHOLDER).getRequestProperty("Api-Key"));
         answerToken(Approov.TokenFetchStatus.REJECTED);
         HttpsURLConnection request = ApproovTestSupport.connection(URL);
         request.setRequestProperty("Api-Key", "Bearer " + PLACEHOLDER);
         assertThrows(ApproovFetchStatusException.class, () -> ApproovService.addApproov(request));
         assertEquals("Bearer " + PLACEHOLDER, request.getRequestProperty("Api-Key"));
         approov.verify(() -> Approov.fetchSecureStringAndWait(anyString(), any()), never());
+    }
+
+    @Test
+    public void aSecretsOnlyAPIGetsItsSecureStringsButNoToken() throws Exception {
+        answerToken(Approov.TokenFetchStatus.UNPROTECTED_URL);
+        HttpsURLConnection request = send("Bearer " + PLACEHOLDER);
+        assertEquals("Bearer " + SECRET, request.getRequestProperty("Api-Key"));
+        assertNull(request.getRequestProperty("Approov-Token"));
+        // the substituted header is not carried to another location by a redirect the platform follows
+        assertFalse(request.getInstanceFollowRedirects());
+    }
+
+    @Test
+    public void aRequestWithoutAddedHeadersKeepsFollowingRedirects() throws Exception {
+        answerToken(Approov.TokenFetchStatus.UNKNOWN_URL);
+        assertTrue(send(null).getInstanceFollowRedirects());
+    }
+
+    @Test
+    public void aProtectedRequestDoesNotFollowRedirectsByItself() throws Exception {
+        assertFalse(send(null).getInstanceFollowRedirects());
+    }
+
+    @Test
+    public void aPinnedRequestAsksForItsOwnConnection() throws Exception {
+        // the JVM drops a Connection value other than close that the app sets, so the case of an app that
+        // sets its own value is not observable here
+        assertEquals("close", send(null).getRequestProperty("Connection"));
     }
 
     @Test

@@ -129,7 +129,7 @@ ApproovServiceMutator getApproovInterceptorExtensions()
 
 ## setProceedOnNetworkFail
 
-If `proceed` is `true`, the default decisions let a request proceed with no Approov headers when the token fetch fails with `NO_NETWORK`, `POOR_NETWORK` or `MITM_DETECTED`. The default is `false`, and `initialize` puts it back. If `setUseApproovStatusIfNoToken` is on, the request proceeds with the status instead.
+Deprecated: use `ApproovServiceMutator.ALWAYS_PROCEED`, or `setUseApproovStatusIfNoToken(true)`. If `proceed` is `true`, the default decisions let a request proceed with no Approov headers when the token fetch fails with `NO_NETWORK`, `POOR_NETWORK` or `MITM_DETECTED`. The default is `false`, and `initialize` puts it back. If `setUseApproovStatusIfNoToken` is on, the request proceeds with the status instead.
 
 ```java
 void setProceedOnNetworkFail(boolean proceed)
@@ -391,7 +391,7 @@ void setInstallAttrsInToken(String attrs) throws ApproovException
 
 ## addApproov
 
-Adds Approov to the connection, in place. For a request that the mutator lets proceed, it adds the token header and any trace header. It also substitutes the secure string headers, and signs the request if you installed message signing. It also pins the connection. Call it just before the request.
+Adds Approov to the connection, in place. For a request that the mutator lets proceed, it adds the token header and any trace header. It also substitutes the secure string headers, and signs the request if you installed message signing. It also pins the connection, and sets `Connection: close` unless the request has a `Connection` header. A request that carries a header that the package added does not follow redirects by itself. Call it just before the request.
 
 ```java
 void addApproov(HttpsURLConnection request) throws ApproovException
