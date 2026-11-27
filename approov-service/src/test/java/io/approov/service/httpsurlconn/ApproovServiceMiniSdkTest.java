@@ -43,7 +43,7 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ApproovServiceMiniSdkTest {
-    private final String validInitialConfig = "#cb-ivol#mAxOF0ekJUOC36J5XWmVmVipOcUoEdMjhPSp2FVtyTo=";
+    private final String validInitialConfig = "#test-account#mAxOF0ekJUOC36J5XWmVmVipOcUoEdMjhPSp2FVtyTo=";
     private Context context;
  
     @Before
@@ -76,7 +76,7 @@ public class ApproovServiceMiniSdkTest {
         ApproovService.initialize(context, validInitialConfig);
  
         // Re-init with different config should throw illegal state
-        String differentConfig = "#cb-other#mAxOF0ekJUOC36J5XWmVmVipOcUoEdMjhPSp2FVtyTo=";
+        String differentConfig = "#test-account-other#mAxOF0ekJUOC36J5XWmVmVipOcUoEdMjhPSp2FVtyTo=";
         try {
             ApproovService.initialize(context, differentConfig);
             fail("Expected IllegalStateException");
@@ -981,13 +981,19 @@ public class ApproovServiceMiniSdkTest {
     // ==================================================================================
 
     private String getTargetURL() {
-        String url = System.getenv("TESTING_REPLY_URL");
-        return (url != null) ? url : "https://replay.ivol.workers.dev";
+        return requiredEnvironmentURL("TESTING_REPLY_URL");
     }
- 
+
     private String getUnprotectedURL() {
-        String url = System.getenv("TESTING_REPLY_URL_UNPROTECTED");
-        return (url != null) ? url : "https://replay-unprotected.ivol.workers.dev";
+        return requiredEnvironmentURL("TESTING_REPLY_URL_UNPROTECTED");
+    }
+
+    // the echo worker URLs come from the environment, as CI sets them; a local run must set them too
+    private static String requiredEnvironmentURL(String name) {
+        String url = System.getenv(name);
+        if ((url == null) || url.isEmpty())
+            throw new IllegalStateException(name + " is not set: export the echo worker URL before running the tests");
+        return url;
     }
  
     private String getTargetHost() {
