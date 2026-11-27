@@ -22,6 +22,9 @@ Entries marked **Breaking** need a source change.
 - `getLastARC()` makes no token fetch of its own. It returns the ARC of the most recent token, secure string or custom JWT fetch, or an empty string.
 - The package logs a missing install or account signature as a warning once per process. It logs a request that it sends unsigned as an error once per process. It logs later occurrences at debug level.
 - The signed `@target-uri` leaves out an explicit default port (`:443` for `https`, `:80` for `http`) and any `#fragment`. The signed `@authority` is the lowercase host with a non-default port. The signature uses the path `/` for a URL with no path. The package no longer reads the URL with `java.net.URI`. A host factory matches the host name without regard to case and without a port.
+- The package signs the URL in the normalized form that Android sends. Android percent-encodes some characters, such as `|` or a space in the path and characters that are not ASCII, and keeps existing escapes. If the package cannot parse a URL, it sends the request unsigned and logs one error.
+- The signed `@query` starts with `?`, and is `?` alone for a URL with no query, as RFC 9421 requires. The signed `@query-param` value uses the form encoding of RFC 9421.
+- A signature covers each component once, also when the token header is one of the optional headers of the factory.
 - An unsupported message signing algorithm fails the request with `ApproovException`, where 3.5.x threw `IllegalStateException`.
 
 ### Deprecated

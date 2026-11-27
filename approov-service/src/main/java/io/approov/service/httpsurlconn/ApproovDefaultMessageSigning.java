@@ -47,6 +47,8 @@ import io.approov.util.httpsurlconn.http.sfv.ListElement;
 import io.approov.util.httpsurlconn.sig.ComponentProvider;
 import io.approov.util.httpsurlconn.sig.SignatureBaseBuilder;
 import io.approov.util.httpsurlconn.sig.SignatureParameters;
+import okhttp3.HttpUrl;
+import okio.Buffer;
 import okio.ByteString;
 
 
@@ -104,11 +106,16 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
     private static final AtomicBoolean accountMissingLogged = new AtomicBoolean();
     private static final AtomicBoolean unsignedLogged = new AtomicBoolean();
 
+    // true once a request left unsigned because its URL cannot be parsed has been logged as an error, after
+    // which such a request is logged at debug level
+    private static final AtomicBoolean unparsedUrlLogged = new AtomicBoolean();
+
     // clears the once per process flags of the missing signature logs
     static void resetMissingSignatureLogsForTesting() {
         installMissingLogged.set(false);
         accountMissingLogged.set(false);
         unsignedLogged.set(false);
+        unparsedUrlLogged.set(false);
     }
 
     // the mutator whose decisions the signer makes, or null for the interface default decisions
@@ -390,6 +397,17 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         }
         // generate and add a message signature
         HttpsURLConnectionComponentProvider provider = new HttpsURLConnectionComponentProvider(request);
+
+        // Fail-open: a URL that HttpUrl cannot parse is sent as written, which Android would also reject, so no
+        // signature over the URL Android sends can be made
+        if (!provider.hasWireUrl()) {
+            String line = "Message signing: request URL cannot be parsed, proceeding unsigned";
+            if (unparsedUrlLogged.compareAndSet(false, true))
+                ApproovLog.e(TAG, line);
+            else
+                ApproovLog.d(TAG, line);
+            return request;
+        }
         SignatureParameters params;
         try {
             params = buildSignatureParameters(provider, changes);
@@ -908,9 +926,9 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
     protected static final class HttpsURLConnectionComponentProvider implements ComponentProvider {
         private HttpsURLConnection request;
 
-        // the URL of the connection, and its text exactly as the URL holds it
-        private final URL url;
-        private final String urlString;
+        // the URL as Android sends it without any fragment, or null if it cannot be parsed, in which case only
+        // the components that use it fail
+        private final HttpUrl wireUrl;
 
         /**
          * Constructs an instance of {@code HttpsURLConnectionComponentProvider}.
@@ -919,18 +937,59 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          */
         HttpsURLConnectionComponentProvider(HttpsURLConnection request) {
             this.request = request;
-            this.url = request.getURL();
-            this.urlString = url.toString();
+            this.wireUrl = parseWireUrl(request.getURL().toString());
+        }
+
+        /**
+         * Parses a URL as Android does before it sends a request, without the fragment. Android's
+         * HttpURLConnection parses the URL with OkHttp's HttpUrl and writes the request line from the result, so
+         * a character it does not send as written, such as "|" or a space in the path, or a character that is
+         * not ASCII, is percent-encoded, while an existing escape stays as it is. The scheme and host are in
+         * lowercase, and a default port is left out.
+         *
+         * @param url is the URL as the app wrote it
+         * @return the parsed URL without any fragment, or null if HttpUrl cannot parse it
+         */
+        static HttpUrl parseWireUrl(String url) {
+            if (url == null)
+                return null;
+            HttpUrl parsed;
+            try {
+                parsed = HttpUrl.parse(url);
+            } catch (RuntimeException e) {
+                return null;
+            }
+            if ((parsed != null) && (parsed.encodedFragment() != null))
+                parsed = parsed.newBuilder().fragment(null).build();
+            return parsed;
+        }
+
+        // gets the request URL as Android sends it
+        private HttpUrl url() {
+            if (wireUrl == null)
+                throw new IllegalArgumentException("Request URL cannot be parsed");
+            return wireUrl;
+        }
+
+        /**
+         * Tells whether the request URL can be parsed, so that the components that use it can be given.
+         *
+         * @return true if the URL can be parsed, false if the request cannot be signed
+         */
+        boolean hasWireUrl() {
+            return wireUrl != null;
         }
 
         /**
          * Gets the host of the request without any port, in lowercase, which is used to select a host
-         * factory. An IPv6 address keeps its brackets.
+         * factory. An IPv6 address keeps its brackets, and an internationalized domain name is in its ASCII
+         * form, as Android sends it.
          *
          * @return the host of the request
          */
         String getHost() {
-            return url.getHost().toLowerCase(Locale.ROOT);
+            String host = url().host();
+            return (host.indexOf(':') >= 0) ? "[" + host + "]" : host;
         }
 
         @Override
@@ -946,92 +1005,121 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          */
         @Override
         public String getAuthority() {
+            HttpUrl url = url();
             String authority = getHost();
-            if (url.getPort() != -1 && url.getPort() != url.getDefaultPort())
-                authority += ":" + url.getPort();
+            if (url.port() != HttpUrl.defaultPort(url.scheme()))
+                authority += ":" + url.port();
             return authority;
         }
 
         @Override
-        public String getScheme() { return url.getProtocol(); }
+        public String getScheme() {
+            return url().scheme();
+        }
 
         /**
-         * Gets the @target-uri derived component, which is the request URL as the stack sends it, leaving
-         * out any fragment as that is never sent, and any explicit default port (":443" for https and ":80"
-         * for http). Nothing else changes, so the path, the query and their percent-encoding are as the app
-         * wrote them. An absent path is the root path, as the stack sends it.
+         * Gets the @target-uri derived component, which is the request URL as Android sends it, leaving out any
+         * fragment as that is never sent. The scheme and host are in lowercase, a default port is left out,
+         * an absent path is the root path, and a character that Android percent-encodes is percent-encoded.
          *
          * @return the target URI of the request
          */
         @Override
         public String getTargetUri() {
-            String text = urlString;
-            int fragment = text.indexOf('#');
-            if (fragment >= 0)
-                text = text.substring(0, fragment);
-
-            // the authority runs from after "://" to the first of "/", "?" or the end of the text
-            int authorityStart = text.indexOf("://") + 3;
-            int authorityEnd = text.length();
-            for (int i = authorityStart; i < text.length(); i++) {
-                char c = text.charAt(i);
-                if (c == '/' || c == '?') {
-                    authorityEnd = i;
-                    break;
-                }
-            }
-            String authority = text.substring(authorityStart, authorityEnd);
-            // an explicit port follows the last colon after any user info and any IPv6 address in brackets
-            int portColon = authority.lastIndexOf(':');
-            if (portColon > authority.lastIndexOf(']') && portColon > authority.lastIndexOf('@')
-                    && url.getPort() == url.getDefaultPort() && url.getPort() != -1)
-                authority = authority.substring(0, portColon);
-            String rest = text.substring(authorityEnd);
-            if (rest.isEmpty() || rest.charAt(0) == '?')
-                rest = "/" + rest;
-            return text.substring(0, authorityStart) + authority + rest;
+            return url().toString();
         }
 
         @Override
         public String getRequestTarget() {
-            String requestTarget = getPath();
-            String query = url.getQuery();
-            if (query != null) {
-                requestTarget += "?" + query;
-            }
-            return requestTarget;
+            HttpUrl url = url();
+            String query = url.encodedQuery();
+            return (query == null) ? url.encodedPath() : url.encodedPath() + "?" + query;
         }
 
         @Override
         public String getPath() {
-            String path = url.getPath();
-            return (path == null || path.isEmpty()) ? "/" : path;
+            return url().encodedPath();
         }
 
+        /**
+         * Gets the @query derived component, which is the query as sent with its leading "?", or "?" alone if
+         * there is none.
+         *
+         * @return the query of the request
+         */
         @Override
         public String getQuery() {
-            return url.getQuery();
+            String query = url().encodedQuery();
+            return (query == null) ? "?" : "?" + query;
         }
 
+        /**
+         * Gets the @query-param derived component for a name, which is the encoded name from the component
+         * identifier. The value is the decoded value of the parameter encoded again with the
+         * application/x-www-form-urlencoded percent-encode set, with a space as %20.
+         *
+         * @param name is the encoded name of the query parameter
+         * @return the value of the query parameter, or null if it occurs more than once
+         */
         @Override
         public String getQueryParam(String name) {
-            // Parse from the query as written to preserve encoded bytes exactly as used by signature construction.
-            String query = url.getQuery();
-            if (query == null || query.isEmpty()) throw new IllegalArgumentException("Could not find query parameter named " + name);
-            String[] parts = query.split("&");
-            String found = null;
-            for (String part : parts) {
-                int idx = part.indexOf('=');
-                String k = idx >= 0 ? part.substring(0, idx) : part;
-                String v = idx >= 0 ? part.substring(idx + 1) : "";
-                if (k.equals(name)) {
-                    if (found != null) return null;
-                    found = v;
+            List<String> values = url().queryParameterValues(formDecode(name));
+            if (values.isEmpty()) {
+                throw new IllegalArgumentException("Could not find query parameter named " + name);
+            } else if (values.size() > 1) {
+                // a query parameter that occurs more than once must not be included in the signature, which we
+                // indicate by returning null, and the whole @query should be signed instead
+                return null;
+            }
+            String value = values.get(0);
+            return (value == null) ? "" : formEncode(value);
+        }
+
+        // decodes application/x-www-form-urlencoded text where + is a space and %XX a byte of UTF-8, keeping
+        // a malformed escape as it is
+        private static String formDecode(String text) {
+            if ((text.indexOf('%') < 0) && (text.indexOf('+') < 0))
+                return text;
+            Buffer out = new Buffer();
+            for (int i = 0; i < text.length(); ) {
+                int c = text.codePointAt(i);
+                if (c == '+') {
+                    out.writeByte(' ');
+                } else if ((c == '%') && (i + 2 < text.length())
+                        && (Character.digit(text.charAt(i + 1), 16) >= 0)
+                        && (Character.digit(text.charAt(i + 2), 16) >= 0)) {
+                    out.writeByte((Character.digit(text.charAt(i + 1), 16) << 4)
+                            | Character.digit(text.charAt(i + 2), 16));
+                    i += 3;
+                    continue;
+                } else {
+                    out.writeUtf8CodePoint(c);
+                }
+                i += Character.charCount(c);
+            }
+            return out.readUtf8();
+        }
+
+        // percent-encodes UTF-8 text with the application/x-www-form-urlencoded percent-encode set, which
+        // leaves only ASCII letters, digits and *-._
+        private static String formEncode(String text) {
+            byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+            StringBuilder out = new StringBuilder(bytes.length);
+            for (byte b : bytes) {
+                int c = b & 0xff;
+                if (((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9'))
+                        || (c == '*') || (c == '-') || (c == '.') || (c == '_')) {
+                    out.append((char) c);
+                } else {
+                    out.append('%').append(HEX_DIGITS[c >> 4]).append(HEX_DIGITS[c & 0xf]);
                 }
             }
-            if (found == null) throw new IllegalArgumentException("Could not find query parameter named " + name);
-            return found;
+            return out.toString();
         }
+
+        // the hexadecimal digits used for percent-encoding
+        private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
+
         @Override
         public String getStatus() { throw new IllegalStateException("Only requests are supported"); }
 
