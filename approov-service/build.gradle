@@ -74,7 +74,7 @@ configurations {
 
 // Shade + relocate BouncyCastle into a layer-private namespace so it is not exposed as a
 // dependency and cannot clash with an app's own copy. Note the intermediate `httpsurlconn`
-// segment (TESTING_REQUIREMENTS §9.2). bcprov is declared in the `shadowed` config (not
+// segment. bcprov is declared in the `shadowed` config (not
 // implementation), removing it from the published POM.
 tasks.register('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
     archiveClassifier.set('shadow')

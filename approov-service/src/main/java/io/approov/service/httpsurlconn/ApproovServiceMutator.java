@@ -235,8 +235,8 @@ public interface ApproovServiceMutator {
                 return false;
             case NO_APPROOV_SERVICE:
                 // Approov service unavailable but the request proceeds: emit the (empty) token
-                // header — and any trace ID — as evidence that Approov processing occurred
-                // (TESTING_REQUIREMENTS §2 Missing Artifacts Fallback), rather than omitting it.
+                // header — and any trace ID — as evidence that Approov processing occurred,
+                // rather than omitting it.
                 return true;
             case UNKNOWN_URL:
             case UNPROTECTED_URL: // Continue without any headers for unprotected URLs (anti-MitM)

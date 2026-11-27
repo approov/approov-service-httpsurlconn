@@ -135,8 +135,7 @@ public class ApproovService {
 
         // If already initialized with a valid (non-empty) config, ignore a later empty-config
         // call: the existing Approov protection must remain active and the call must not be
-        // forwarded to the SDK or reset any service-layer state (TESTING_REQUIREMENTS §1,
-        // "Empty Configuration after Valid Configuration").
+        // forwarded to the SDK or reset any service-layer state.
         if (isApproovEnabled() && config.isEmpty()) {
             Log.d(TAG, "ApproovService already initialized with a valid config; ignoring empty configuration");
             return;
@@ -283,7 +282,7 @@ public class ApproovService {
         Log.d(TAG, "setApproovHeader " + header + ", " + prefix);
         approovTokenHeader = header;
         // A null prefix means "no prefix" — coerce to "" so it is never concatenated as the
-        // literal string "null" before the token (TESTING_REQUIREMENTS §2 Custom Header Prefixes).
+        // literal string "null" before the token.
         approovTokenPrefix = (prefix != null) ? prefix : APPROOV_TOKEN_PREFIX;
     }
 
@@ -1057,8 +1056,8 @@ public class ApproovService {
             String traceIDHeader = getApproovTraceIDHeader();
             String traceID = getTokenFetchTraceID(approovResults);
             // Emit the trace header whenever the SDK provides a value, even an empty one, as
-            // evidence that Approov processing occurred (TESTING_REQUIREMENTS §2 Missing Artifacts
-            // Fallback). Only a null trace ID (none available) leaves the header off.
+            // evidence that Approov processing occurred. Only a null trace ID (none available)
+            // leaves the header off.
             if ((traceIDHeader != null) && (traceID != null)) {
                 setTraceIDHeaderKey = traceIDHeader;
                 setTraceIDHeaderValue = traceID;
@@ -1325,8 +1324,7 @@ final class PinningHostnameVerifier implements HostnameVerifier {
     public boolean verify(String hostname, SSLSession session) {
         if (!ApproovService.isApproovEnabled()) {
             // Bypass mode: skip Approov pinning, but still apply standard hostname
-            // verification via the OS/default verifier — never blindly accept
-            // (TESTING_REQUIREMENTS §4 "Bypass Mode Must Not Skip Certificate Trust Validation").
+            // verification via the OS/default verifier — never blindly accept.
             return delegate.verify(hostname, session);
         }
         // check the delegate function first and only proceed if it passes
