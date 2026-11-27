@@ -1,282 +1,263 @@
 # Usage
 
-This document describes the features and functionality of the Approov Service for `HttpsURLConnection`. It provides details on how to interact with the service layer and customize its behavior to suit your application's needs, specifically through the `ApproovServiceMutator`. For a basic integration example, please refer to the [Quickstart guide](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/README.md).
+This document describes the features of the Approov Service for `HttpsURLConnection`, and how to change its default behavior. For a basic integration, see the [README](README.md) and the [Quickstart guide](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/README.md). [REFERENCE.md](REFERENCE.md) describes every method.
 
-# Approov Service Mutator
+## Initialize, then configure
 
-The `ApproovServiceMutator` allows you to customize the behavior of the Approov `HttpsURLConnection` layer at key points in request preparation. You can override specific methods to tailor the handling of attestations and requests while retaining the default behavior for other cases.
+Call `initialize` once when your app starts, then make every configuration call that your app needs:
 
-## Why use a mutator
+```java
+ApproovService.initialize(getApplicationContext(), "<your-approov-account-id>");
+ApproovService.setServiceMutator(ApproovServiceMutator.ALWAYS_PROCEED);
+```
 
-- Centralize app-specific policy without forking the service layer.
-- Add telemetry on rejections or network failures.
-- Skip Approov processing for health checks or local endpoints.
-- Customize pinning decisions per request.
-- Adjust behavior when token or secure string fetches fail.
+Each `initialize` resets these settings to their defaults:
 
-## Default behavior
+* the token, trace and binding headers, and `setUseApproovStatusIfNoToken`
+* the substitution headers and the exclusions
+* the service mutator, and so any message signing
+* the value of `getLastARC()`
 
-By default, the `ApproovService` prepares requests based on the attestation status. It relies on the underlying SDK to provide a proof of attestation, which is a cryptographically signed JWT token. Requesting this attestation typically returns the token immediately; however, a network connection to the Approov cloud is required upon app launch or when the token is nearing expiration. Note that the SDK only knows if an attestation token has been obtained; it cannot determine if the token is valid, because validity is checked by your backend. The default behavior is described in more detail in the official documentation section [Approov Token Fetch Results](https://approov.io/docs/latest/approov-usage-documentation/#approov-token-fetch-results) and is summarized in the table below:
+It keeps the logging level. So a setting that you make before `initialize` is lost.
 
-| Approov Fetch Status | Action | Result |
+The package passes every non-empty account ID and comment to the Approov SDK, and the SDK decides. A repeat call with the same account ID and comment returns at once, but it also resets the configuration. The SDK rejects a different account ID or comment, and its exception reaches your code with the package state unchanged.
+
+### Bypass mode
+
+Initialize with an empty account ID, `""`, to start the package in bypass mode. In bypass mode, `isApproovServiceEnabled()` is `true` and `isApproovProtectionEnabled()` is `false`:
+
+* `addApproov` returns the connection unchanged. There is no token, secure string, signature or Approov pinning, only OS trust.
+* The methods that call the SDK, such as `fetchToken`, throw `ApproovException`.
+* `addSubstitutionHeader` and `addExclusionURLRegex` do nothing.
+
+A later `initialize` with the account ID turns on Approov protection, if the SDK accepts it. Once protection is on, the package ignores an `initialize` with `""`.
+
+Before any `initialize`, `addApproov` throws `ApproovException`.
+
+## Adding Approov to a request
+
+Call one of these methods on each connection, after you set its method and headers and before you connect:
+
+| Method | Use it for |
+| :--- | :--- |
+| `addApproov(connection)` | a request with no body to sign, such as a `GET` |
+| `addApproov(connection, body)` | a request whose body you have as a `byte[]`, so that a message signature covers the body |
+| `addApproovToConnection(connection)` | a `POST`, `PUT` or `PATCH` request, or one with `setDoOutput(true)`, when you write the body to the output stream |
+
+`addApproov(connection)` and `addApproov(connection, body)` change the connection in place. They make the message signature immediately, so set every header that you want signed before the call.
+
+`addApproovToConnection` returns the connection to use for the request. For a request with a body, it returns a new connection. This connection holds the body in memory, and signs the request just before it sends it. Write the body to the returned connection, and read the response from it:
+
+```java
+HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+connection.setRequestMethod("POST");
+connection.setRequestProperty("Content-Type", "application/json");
+connection = ApproovService.addApproovToConnection(connection);
+try (OutputStream out = connection.getOutputStream()) {
+    out.write(body);
+}
+int status = connection.getResponseCode();
+```
+
+Set the request method before you call `addApproovToConnection`. For any other request, it returns the connection that you passed in.
+
+An `HttpsURLConnection` sends one request only. For a retry, open a new connection and call the method again, so that the request has a current token.
+
+## What happens by default
+
+For each request, the package fetches an Approov token for the request URL. It does not process a request to an [excluded URL](#excluding-urls). The installed service mutator then decides what the request carries, or if it fails. The package gives two standard mutators:
+
+* `ApproovServiceMutator.CLOSE_FAILURE` is the default. It keeps the 3.5.x token decisions.
+* `ApproovServiceMutator.ALWAYS_PROCEED` never fails a request because of its token fetch. Your backend then decides.
+
+`ApproovServiceMutator.DEFAULT` is `CLOSE_FAILURE`. `setServiceMutator(null)` and each `initialize` put it back. To always proceed:
+
+```java
+ApproovService.setServiceMutator(ApproovServiceMutator.ALWAYS_PROCEED);
+```
+
+| Token fetch status | `CLOSE_FAILURE` (default) | `ALWAYS_PROCEED` |
 | :--- | :--- | :--- |
-| **Success** | Proceed | The request is sent with the `Approov-Token`. |
-| **No Network / Poor Network** | Throw Exception | An `ApproovNetworkException` is thrown. The request should be retried. |
-| **Rejection** | Throw Exception | An `ApproovRejectionException` is thrown. The request is marked as rejected. |
-| **No Approov Service / Unknown URL / Unprotected URL** | Proceed | The request is sent without an `Approov-Token`. |
+| `SUCCESS` | proceeds with the token and any trace ID | same |
+| `UNKNOWN_URL`, `UNPROTECTED_URL` | proceeds with no Approov headers | same |
+| `NO_APPROOV_SERVICE` | proceeds with an empty token header (or the status) and any trace ID | same |
+| `NO_NETWORK`, `POOR_NETWORK`, `MITM_DETECTED` | throws `ApproovNetworkException`, which your app can let the user retry | proceeds with an empty token header (or the status) and any trace ID |
+| any other status | throws `ApproovFetchStatusException` | proceeds with an empty token header (or the status) and any trace ID |
 
-## Customizing request handling with mutators
+"The status" means the fetch status name, such as `NO_NETWORK`, in the token header after any prefix. Turn this on with `setUseApproovStatusIfNoToken(true)`. Under `CLOSE_FAILURE`, this also lets the network failures proceed with the status in the token header. `setProceedOnNetworkFail(true)` lets them proceed with no Approov headers.
 
-You may want to modify this behavior to suit specific app requirements. A common use case is handling `NO_APPROOV_SERVICE` statuses differently.
+Under both standard mutators, a secure string that the package cannot fetch does not fail the request. The header keeps the value that your app set, and the request goes ahead.
 
-### Prevent access without a token
+## Service mutators
 
-The standard behavior for statuses like `NO_APPROOV_SERVICE` is to proceed with the request without adding an Approov token. This might occur, for example, if a device cannot connect to the Approov cloud due to a restricted network environment. You may wish to prevent this behavior to ensure that only requests with valid proof of attestation reach your backend API, allowing you to explicitly handle this case within your application.
+A service mutator, an `ApproovServiceMutator`, holds the decisions of the package. Install your own with `setServiceMutator` after `initialize`. Every hook has a default, which is the `CLOSE_FAILURE` decision, so override only the hooks that you need:
 
-You can use a mutator to enforce this policy by throwing an error for such statuses.
+| Hook | Decides |
+| :--- | :--- |
+| `handleInterceptorShouldProcessConnection` | if the package processes a request. The default applies the exclusions |
+| `handleInterceptorFetchTokenResult` | from the token fetch result, if the request proceeds with the Approov headers, proceeds without them, or fails |
+| `handleInterceptorHeaderSubstitutionResult` | if a secure string replaces a header value |
+| `handleInterceptorProcessedRequest` | final changes to the request. The message signer signs here |
+| `handlePinningShouldProcessRequest` | if Approov pinning applies to a request |
+| `handlePrecheckResult`, `handleFetchTokenResult`, `handleFetchSecureStringResult`, `handleFetchCustomJWTResult` | how the direct methods, such as `fetchToken`, change a result into an exception |
+
+A hook fails a request when it throws an `ApproovException`. This mutator fails a request when the app cannot reach the Approov service, and keeps the default decisions for all other statuses:
 
 ```java
 import com.criticalblue.approovsdk.Approov;
 
+import io.approov.service.httpsurlconn.ApproovException;
 import io.approov.service.httpsurlconn.ApproovNetworkException;
 import io.approov.service.httpsurlconn.ApproovServiceMutator;
 
 public class EnforceTokenMutator implements ApproovServiceMutator {
     @Override
     public boolean handleInterceptorFetchTokenResult(Approov.TokenFetchResult approovResults, String url)
-            throws io.approov.service.httpsurlconn.ApproovException {
-        if (approovResults.getStatus() == Approov.TokenFetchStatus.NO_APPROOV_SERVICE) {
-            throw new ApproovNetworkException(
-                    approovResults.getStatus(),
-                    "Network issue. Will attempt connection again."
-            );
-        }
-        return ApproovServiceMutator.DEFAULT.handleInterceptorFetchTokenResult(approovResults, url);
+            throws ApproovException {
+        if (approovResults.getStatus() == Approov.TokenFetchStatus.NO_APPROOV_SERVICE)
+            throw new ApproovNetworkException(approovResults.getStatus(), "Approov service not available");
+        return ApproovServiceMutator.CLOSE_FAILURE.handleInterceptorFetchTokenResult(approovResults, url);
     }
 }
 ```
 
-### Allow access without a token
-
-Conversely, if the device could not obtain proof of attestation, for example because of a `POOR_NETWORK` or `NO_NETWORK` response from the SDK, the default behavior is to cancel the request to your API. However, you might prefer to let the request attempt the connection to your backend without the Approov token to allow for server-side handling.
-
-To implement this, check for `POOR_NETWORK` and return `false`, which proceeds without adding the token.
-
-```java
-if (approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK) {
-    return false;
-}
-```
-
-### Add custom headers using a mutator
-
-You can override `handleInterceptorProcessedRequest` to add additional headers or modify the request after Approov has processed it. This is useful for adding app metadata or other diagnostics.
-
-```java
-import javax.net.ssl.HttpsURLConnection;
-
-import io.approov.service.httpsurlconn.ApproovRequestMutations;
-import io.approov.service.httpsurlconn.ApproovServiceMutator;
-
-public class MyMutator implements ApproovServiceMutator {
-    private final ApproovServiceMutator signer = ApproovServiceMutator.DEFAULT;
-
-    @Override
-    public HttpsURLConnection handleInterceptorProcessedRequest(
-            HttpsURLConnection request,
-            ApproovRequestMutations changes
-    ) throws io.approov.service.httpsurlconn.ApproovException {
-        HttpsURLConnection processed = signer.handleInterceptorProcessedRequest(request, changes);
-        processed.setRequestProperty("Client-Platform", "android");
-        return processed;
-    }
-}
-```
-
-## How to use a custom mutator in your application
-
-Create a mutator, then install it once during app startup, for example in your `Application` class or initialization path.
-
-```java
-import io.approov.service.httpsurlconn.ApproovService;
-import io.approov.service.httpsurlconn.ApproovServiceMutator;
-
-public final class Example {
-    public static void install() {
-        ApproovService.setServiceMutator(new MyMutator());
-    }
-}
-```
-
-## Preparing `HttpsURLConnection` requests
-
-Requests are prepared by passing a connection through `ApproovService.addApproovToConnection(...)` before the request is sent:
-
-```java
-URL url = new URL("https://api.example.com/shapes");
-HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-connection.setRequestMethod("GET");
-connection = ApproovService.addApproovToConnection(connection);
-```
-
-You should always continue using the returned connection reference. In the common case this is the same instance that you passed in; a wrapped connection is returned only when deferred body-aware processing (a message-signing body digest) is required.
-
-### Substituting query parameters
-
-Automated query parameter substitution was removed (Issue #14): `java.net.URL` is immutable once the connection is opened. To use an Approov secure string as a query value, fetch it manually and build the URL **before** opening the connection:
-
-```java
-String secret = ApproovService.fetchSecureString("my_api_key_name", null);
-URL url = new URL("https://api.example.com/shapes?api_key=" + secret);
-HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-connection = ApproovService.addApproovToConnection(connection);
-```
-
-> **Note:** the secure string is used exactly as returned by Approov — it is **not** URL-encoded for you. If it can contain reserved characters (`&`, `=`, `#`, spaces, …), URL-encode it (or ensure it is encoded when added via the Approov CLI) to avoid mangling the query string.
+`handleInterceptorProcessedRequest` cannot change or remove the token header or the trace header that the package set. The package puts them back and logs a warning.
 
 ## Message signing
 
-It is possible to sign HTTP requests using Approov to ensure message integrity and authenticity. There are two types of message signing available:
+The message signer, `ApproovDefaultMessageSigning`, adds RFC 9421 message signatures to each request that carries the Approov token header. Message signing is off until you install the signer. The signer is a service mutator, so install it after `initialize`. Another `setServiceMutator` call or `initialize` removes it.
 
-1. [Installation Message Signing](https://ext.approov.io/docs/latest/approov-usage-documentation/#installation-message-signing): Uses an installation-specific key held by the device to sign requests.
-2. [Account Message Signing](https://ext.approov.io/docs/latest/approov-usage-documentation/#account-message-signing): Uses a shared account-specific secret key delivered to the SDK only upon successful attestation.
-
-Message signing is not enabled unless you opt in. Even if you install `ApproovDefaultMessageSigning`, a signature is only added when:
-
-- The request already has an `Approov-Token` header, meaning Approov processing ran.
-- A `SignatureParametersFactory` is configured for the request host.
-
-### Enable with default settings
+The simplest signer adds both the [install signature](https://approov.io/docs/latest/approov-usage-documentation/#installation-message-signing) and the [account signature](https://approov.io/docs/latest/approov-usage-documentation/#account-message-signing):
 
 ```java
-import io.approov.service.httpsurlconn.ApproovDefaultMessageSigning;
-import io.approov.service.httpsurlconn.ApproovService;
-
-ApproovDefaultMessageSigning.SignatureParametersFactory factory =
-        ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory();
-ApproovDefaultMessageSigning signer =
-        new ApproovDefaultMessageSigning().setDefaultFactory(factory);
-ApproovService.setServiceMutator(signer);
+ApproovService.setServiceMutator(ApproovDefaultMessageSigning.combined());
 ```
 
-### Customize behavior
+`combined()` makes the `CLOSE_FAILURE` decisions. To sign with other decisions, pass them, for example `combined(ApproovServiceMutator.ALWAYS_PROCEED)` or `combined(new EnforceTokenMutator())`. The signer calls `handleInterceptorProcessedRequest` of that mutator first, so the signature covers its changes.
+
+To choose what the signature covers, give the signer a factory. A signer with no factory signs nothing:
 
 ```java
-import io.approov.service.httpsurlconn.ApproovDefaultMessageSigning;
-
 ApproovDefaultMessageSigning.SignatureParametersFactory factory =
         ApproovDefaultMessageSigning.generateDefaultSignatureParametersFactory()
-                .setUseAccountMessageSigning()
-                .setAddCreated(true)
+                .setUseInstallAndAccountMessageSigning()
                 .setExpiresLifetime(60);
-
-ApproovDefaultMessageSigning signer = new ApproovDefaultMessageSigning()
-        .setDefaultFactory(factory)
-        .putHostFactory("api.example.com", factory);
-
-ApproovService.setServiceMutator(signer);
+ApproovService.setServiceMutator(new ApproovDefaultMessageSigning().setDefaultFactory(factory));
 ```
 
-Account message signing must also be enabled on the Approov account before the
-SDK can generate account signatures. See the Approov CLI documentation for the
-`approov secret -messageSigningKey change` command.
+The default factory makes the install signature only. It covers the method, the target URI, the token and trace headers, and `Authorization`, `Content-Length` and `Content-Type` when the request has them. It adds `created` and an `expires` time 15 seconds later, from `getServerAdjustedCurrentTimeMS()`. Use `putHostFactory(host, factory)` to give one host a different factory.
 
-To disable signing, remove the signer using `setServiceMutator(null)`, or return `null` from your factory for hosts you want to skip.
+Your backend can check the install signature only if the Approov token carries the install public key, which is a setting of your account. See [installation message signing](https://approov.io/docs/latest/approov-usage-documentation/#installation-message-signing).
 
-### Signing over the request body (Content-Digest)
+If the package cannot make a signature, it sends the request with the other signature, or unsigned, and logs it under the `ApproovMsgSign` tag. An unsupported signature algorithm fails the request with an `ApproovException`.
 
-To cover the request body with the signature, configure a body digest on the factory and pass the body bytes to the `addApproov(connection, byte[])` overload — `HttpsURLConnection` does not expose the body for digesting otherwise:
+### Body digest
+
+The default factory adds a SHA-256 `Content-Digest` header, and covers it, when the package has the body. It has the body only from `addApproov(connection, body)`, or from the connection that `addApproovToConnection` returns. Write the same bytes that you pass:
 
 ```java
-factory.setBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA256, false); // required=false
-
-byte[] body = jsonPayload.getBytes(StandardCharsets.UTF_8);
-HttpsURLConnection connection = (HttpsURLConnection) new URL(url).openConnection();
+byte[] body = json.getBytes(StandardCharsets.UTF_8);
+HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 connection.setRequestMethod("POST");
-ApproovService.addApproov(connection, body);   // computes Content-Digest over body
-try (OutputStream os = connection.getOutputStream()) {
-    os.write(body);                              // write the SAME bytes
+connection.setDoOutput(true);
+ApproovService.addApproov(connection, body);
+try (OutputStream out = connection.getOutputStream()) {
+    out.write(body);
 }
 ```
 
-With `required = false` (the default) the request is signed without a `Content-Digest` if the body is unavailable. With `required = true` a body that cannot be digested fails closed with an `ApproovException`.
+Use `setBodyDigestConfig(algorithm, required)` on the factory to change the digest. The algorithm is `DIGEST_SHA256`, `DIGEST_SHA512`, or `null` for no digest.
+
+Only a required body digest fails closed. If `required` is `true` and the package cannot make the digest, the request fails with an `ApproovException` whose cause is a `RequiredBodyDigestException`. From the connection that `addApproovToConnection` returns, this failure is an `IOException` from `getResponseCode` or `getInputStream`, with the `ApproovException` as its cause. Any other failure to build the signature sends the request unsigned, and logs an error.
+
+## Header names
+
+By default, the token goes in `Approov-Token` with no prefix, and the trace ID goes in `Approov-TraceID`. To change them, for example when your backend expects the token in `Authorization`:
+
+```java
+ApproovService.setTokenHeader("Authorization", "Bearer ");
+ApproovService.setTraceIDHeader(null); // null turns the trace header off
+```
+
+The `Approov-TraceID` header is an optional debug header. Your backend can ignore it.
 
 ## Token binding
 
-[Token Binding](https://ext.approov.io/docs/latest/approov-usage-documentation/#token-binding) allows you to bind the Approov token to a specific piece of data, such as an OAuth token or user session identifier. The `ApproovService` calculates a hash of the binding data locally and includes this hash in the Approov token claims. The actual binding data is never sent to the Approov cloud service; only the hash is transmitted.
-
-To set up token binding, specify a header name. The value of this header in your requests will be used for the binding.
+[Token binding](https://approov.io/docs/latest/approov-usage-documentation/#token-binding) binds the Approov token to the value of a request header, such as an OAuth `Authorization` header. The SDK hashes the value on the device. It never sends the value to the Approov cloud service.
 
 ```java
 ApproovService.setBindingHeader("Authorization");
 ```
 
-If the value of the binding header changes, the SDK automatically invalidates the current Approov token and fetches a new one with the updated binding on the next request.
+When the value of the binding header changes, the SDK fetches a new token with the new binding.
 
-## Real-world example
+## Secure strings
 
-This example demonstrates how to customize `ApproovServiceMutator` to apply different options to requests based on hostname.
+[Secure strings](https://approov.io/docs/latest/approov-usage-documentation/#secure-strings) let you remove API keys and other secrets from your app. Approov gives them only to an app that passes attestation.
+
+### Secure strings in headers
+
+Register each header whose value is a secure string key. The package then replaces the value with the secure string:
 
 ```java
-import java.net.URI;
-import java.util.Set;
+ApproovService.addSubstitutionHeader("Api-Key", null);              // the whole value is the key
+ApproovService.addSubstitutionHeader("Authorization", "Bearer ");   // the value after the prefix is the key
+```
 
-import javax.net.ssl.HttpsURLConnection;
+Call `addSubstitutionHeader` after an `initialize` with your account ID. Before that, and in bypass mode, it does nothing.
 
-import com.criticalblue.approovsdk.Approov;
+### Secure strings in query parameters
 
-import io.approov.service.httpsurlconn.ApproovDefaultMessageSigning;
-import io.approov.service.httpsurlconn.ApproovRequestMutations;
-import io.approov.service.httpsurlconn.ApproovServiceMutator;
+The package does not substitute query parameters, because the URL of an `HttpsURLConnection` cannot change after `openConnection`. Fetch the secure string yourself, and build the URL before you open the connection:
 
-public class CustomLogic implements ApproovServiceMutator {
-    private final ApproovServiceMutator signer = new ApproovDefaultMessageSigning();
-    private final Set<String> protectedHosts = Set.of("api.example.com");
-    private final Set<String> allowOfflineForHosts = Set.of("status.example.com");
-    private final Set<String> skipPinningHosts = Set.of("metrics.example.com");
+```java
+String apiKey = ApproovService.fetchSecureString("api_key", null);
+URL url = new URL("https://api.example.com/shapes?api_key=" + URLEncoder.encode(apiKey, "UTF-8"));
+HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+ApproovService.addApproov(connection);
+```
 
-    @Override
-    public boolean handleInterceptorShouldProcessConnection(HttpsURLConnection request)
-            throws io.approov.service.httpsurlconn.ApproovException {
-        String host = request.getURL().getHost();
-        if (!protectedHosts.contains(host)) {
-            return false;
-        }
-        return ApproovServiceMutator.DEFAULT.handleInterceptorShouldProcessConnection(request);
-    }
+`fetchSecureString` returns `null` if the key is not defined. It throws an `ApproovException` if it cannot fetch the secure string. It can need network access, so do not call it from the UI thread. Do not cache the secure string in your app.
 
-    @Override
-    public boolean handleInterceptorFetchTokenResult(Approov.TokenFetchResult approovResults, String url)
-            throws io.approov.service.httpsurlconn.ApproovException {
-        String host = URI.create(url).getHost();
-        if ((approovResults.getStatus() == Approov.TokenFetchStatus.NO_NETWORK
-                || approovResults.getStatus() == Approov.TokenFetchStatus.POOR_NETWORK)
-                && allowOfflineForHosts.contains(host)) {
-            return false;
-        }
-        return ApproovServiceMutator.DEFAULT.handleInterceptorFetchTokenResult(approovResults, url);
-    }
+## Excluding URLs
 
-    @Override
-    public HttpsURLConnection handleInterceptorProcessedRequest(
-            HttpsURLConnection request,
-            ApproovRequestMutations changes
-    ) throws io.approov.service.httpsurlconn.ApproovException {
-        HttpsURLConnection processed = signer.handleInterceptorProcessedRequest(request, changes);
-        processed.setRequestProperty("X-Client-Platform", "android");
-        return processed;
-    }
+The package does not process a request whose URL matches an exclusion regular expression. The expression is not anchored, so use `^` and `$` to match the full URL:
 
-    @Override
-    public boolean handlePinningShouldProcessRequest(java.net.HttpURLConnection request) {
-        String host = request.getURL().getHost();
-        return !skipPinningHosts.contains(host);
-    }
+```java
+ApproovService.addExclusionURLRegex("^https://api\\.example\\.com/health.*");
+```
+
+Pinning still applies to an excluded request. Use exclusions with caution. A request to an excluded URL does not update the pins.
+
+## Pinning
+
+`addApproov` pins each connection to a domain that you added to Approov. It sets a `HostnameVerifier` on the connection, so do not set another one after the call. The verifier first runs the default verifier, then checks that a pin of the host matches a certificate in the chain that the platform accepted. It ignores any other certificate that the server sends. A failed check makes the connection throw `SSLPeerUnverifiedException`, and logs an error under the `ApproovPinVerifier` tag.
+
+A domain with no pins of its own uses the [Managed Trust Roots](https://docs.approov.io/security-configuration/dynamic-pinning/#managed-trust-roots). If there are none, the domain uses OS trust only, and the package logs a warning. If the SDK cannot supply the pins, the connection continues on OS trust and the package logs one error. Before `initialize` and in bypass mode, the package does not pin.
+
+To turn off Approov pinning for some requests, override `handlePinningShouldProcessRequest` in your mutator:
+
+```java
+@Override
+public boolean handlePinningShouldProcessRequest(HttpURLConnection request) {
+    return !request.getURL().getHost().equals("cdn.example.com");
 }
 ```
 
-## Tips
+## Logging and diagnostics
 
-- Keep mutator logic fast and side-effect safe. These hooks run on the request path.
-- Use `ApproovServiceMutator.DEFAULT` to preserve the existing behavior and layer your changes on top.
-- If you override multiple hooks, keep them focused so they remain easy to test and maintain.
+`setLoggingLevel` sets the level of the package logging: `ApproovLogLevel.OFF`, `ERROR`, `WARNING`, `INFO` (the default) or `DEBUG`. At `DEBUG`, the package logs the [loggable form](https://approov.io/docs/latest/approov-usage-documentation/#loggable-tokens) of the token for each request, under the `ApproovService` tag. The URL in the line has no query, user info or fragment.
+
+```java
+ApproovService.setLoggingLevel(ApproovLogLevel.DEBUG);
+```
+
+To see the debug lines of an installed build without a rebuild, turn on debug logging for the `ApproovService` tag. This raises every level except `OFF` to `DEBUG`:
+
+```sh
+adb shell setprop log.tag.ApproovService DEBUG
+```
+
+`getLastARC()` returns the [Attestation Response Code](https://approov.io/docs/latest/approov-usage-documentation/#attestation-response-code) of the most recent token, secure string or custom JWT fetch. It does not fetch. It returns an empty string if there is no ARC.
+
+`getServerAdjustedCurrentTimeMS()` returns the current time, corrected to the clock of the Approov servers. Message signatures use it for their `created` and `expires` times. Use it for your own timestamps that your backend compares with its clock.

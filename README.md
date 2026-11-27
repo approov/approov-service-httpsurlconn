@@ -6,102 +6,131 @@
 ![Message Signing](https://img.shields.io/badge/Message%20Signing-RFC%209421-1f6feb)
 ![Build](https://github.com/approov/approov-service-httpsurlconn/actions/workflows/build_only.yml/badge.svg)
 
-This package is an open-source wrapper layer that allows you to easily use Approov with `HttpsURLConnection` in native Android apps written in Java.
+This package adds [Approov](https://www.approov.io) to an Android app that uses `HttpsURLConnection`. After you initialize it, a call to `addApproov` adds an Approov token to each request to your API domains, and pins the connection. The token, a signed JWT, provides proof of attestation. Your backend checks it to decide whether to accept or reject the request.
 
-This page provides the steps for integrating Approov into your app. Additionally, a step-by-step tutorial guide using our [Shapes App Example](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SHAPES-EXAMPLE.md) is also available.
+This page gives the steps to add Approov to your app. A step-by-step tutorial with the [Shapes App Example](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SHAPES-EXAMPLE.md) is also available. [USAGE.md](USAGE.md) describes the optional features, and [REFERENCE.md](REFERENCE.md) describes every method.
 
-To follow this guide you should have received an onboarding email for a trial or paid Approov account.
+To follow this guide, you need a trial or paid Approov account and its account ID, which is in your onboarding email.
 
-## ADDING APPROOV SERVICE DEPENDENCY
-The Approov integration is available via [`maven`](https://mvnrepository.com/repos/central). This allows inclusion into the project by simply specifying a dependency in the `gradle` files for the app.
-The `Maven` repository is already present in the gradle.build file so the only import you need to make is the actual service layer itself:
+## ADDING THE DEPENDENCY
 
-```gradle
-implementation("io.approov:service.httpsurlconn:3.5.7")
+Make sure `mavenCentral()` is in your repositories. Then add the package to your app's Gradle dependencies:
+
+```groovy
+implementation("io.approov:service.httpsurlconn:3.7.0")
 ```
 
-Make sure you do a Gradle sync (by selecting `Sync Now` in the banner at the top of the modified `.gradle` file) after making these changes.
+The package needs core library desugaring, so turn it on in the `build.gradle` file of your app module:
 
-This package has a further dependency on the closed-source [Approov SDK](https://central.sonatype.com/artifact/io.approov/approov-android-sdk).
+```groovy
+android {
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+}
+```
+
+Without these two lines, the Gradle build of your app fails with an AAR metadata error.
+
+The package supports Android 6.0 (API level 23) and later. It depends on the closed-source [Approov SDK](https://central.sonatype.com/artifact/io.approov/approov-android-sdk) 3.7.0. The Approov SDK needs OkHttp at run time, so the package adds OkHttp to your app. The package does not send your requests with OkHttp.
 
 ## MANIFEST CHANGES
-The following app permissions need to be available in the manifest to use Approov:
+
+Add these permissions to your app manifest:
 
 ```xml
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 <uses-permission android:name="android.permission.INTERNET" />
 ```
 
-Note that the minimum SDK version you can use with the Approov package is 23 (Android 6.0).
-
-Please [read this](https://approov.io/docs/latest/approov-usage-documentation/#targeting-android-11-and-above) section of the reference documentation if targeting Android 11 (API level 30) or above.
+If your app targets Android 11 (API level 30) or later, read [this section](https://approov.io/docs/latest/approov-usage-documentation/#targeting-android-11-and-above) of the reference documentation.
 
 ## INITIALIZING APPROOV SERVICE
-In order to use the `ApproovService` you must initialize it when your app is created, usually in the `onCreate` method:
+
+Initialize `ApproovService` once, when your app starts, with your Approov account ID. Do this in the `onCreate` method of your `Application` class:
 
 ```Java
 import android.util.Log;
 import io.approov.service.httpsurlconn.ApproovService;
-import java.util.UUID;
 
 public class YourApp extends Application {
-    private static final String TAG = "YourApp";
-
     @Override
     public void onCreate() {
         super.onCreate();
-
-        // An app-generated id used to correlate this install/session across your own app
-        // logs and your backend. Use a UUID, or any session/user identifier you already
-        // have — it is NOT an Approov secret.
-        String correlationId = UUID.randomUUID().toString();
-
         try {
-            ApproovService.initialize(getApplicationContext(), "<enter-your-config-string-here>");
-            // Initialization succeeded — log identifiers for correlation / observability.
-            Log.i(TAG, "Approov initialized; deviceID=" + ApproovService.getDeviceID()
-                    + " session=" + correlationId);
+            // your Approov account ID, from your onboarding email or "approov sdk -getConfigString"
+            ApproovService.initialize(getApplicationContext(), "<your-approov-account-id>");
+            if (ApproovService.isApproovProtectionEnabled())
+                Log.i("YourApp", "Approov initialized; deviceID=" + ApproovService.getDeviceID());
         } catch (Exception e) {
-            // Initialization failed — log it and continue UNPROTECTED so the app still works.
-            // Re-initializing with an empty config string enters bypass mode (initialized, but
-            // no Approov token injection, pinning, or secret substitution).
-            Log.e(TAG, "Approov init failed (session=" + correlationId + "); continuing unprotected", e);
+            // the value passed was not a valid account ID; run without Approov rather than not at all
+            Log.e("YourApp", "Approov account ID rejected; starting in bypass mode", e);
             ApproovService.initialize(getApplicationContext(), "");
         }
+        // then configure, after initialize (which resets the configuration), for example:
+        // ApproovService.setTokenHeader("Authorization", "Bearer ");
+        // ApproovService.addSubstitutionHeader("Api-Key", null);
     }
 }
 ```
 
-The `<enter-your-config-string-here>` is a custom string that configures your Approov account access. This will have been provided in your Approov onboarding email.
+About this example:
 
-On success the example logs the Approov **device ID** (`getDeviceID()`) and an **app-generated session/correlation id** (a UUID, or any session/user identifier you use) so a given install can be correlated across your app logs, backend, and the Approov [Live Metrics](https://approov.io/docs/latest/approov-usage-documentation/#metrics-graphs). If initialization fails, the example re-initializes with an empty config so the app keeps working — but those requests go out **without Approov protection**, so treat the backend as the enforcement point.
+* `initialize` throws if the SDK rejects the account ID. The `catch` block then starts the package in **bypass mode**, with an empty account ID `""`. In bypass mode, `addApproov` sends requests without Approov protection.
+* Each `initialize` resets the configuration to its defaults. Make your configuration calls after it. See [initialize, then configure](USAGE.md#initialize-then-configure).
+* Logging the device ID is optional. Log it next to your own user or session ID to correlate an installation with your backend logs.
 
 ## USING APPROOV SERVICE
-You can then make Approov enabled `HttpsURLConnection` API calls using the following call on any `HttpsURLConnection` connection, just before the connection is made:
+
+Call `addApproov` on each `HttpsURLConnection` just before your app sends the request:
 
 ```Java
+HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 ApproovService.addApproov(connection);
 ```
 
-> **NOTE:** It is important that this call is made just prior to the connection being made and thus within any retry loop, to ensure that an updated Approov token is always made available on the connection request.
+> **NOTE:** Make this call immediately before the request, and inside any retry loop. This makes sure that each request has a current Approov token.
 
-For API domains that are configured to be protected with an Approov token, this adds the `Approov-Token` header and pins the connection. This may also substitute header values when using secrets protection.
+For an API domain that you added to Approov, this adds the `Approov-Token` header and pins the connection. It also substitutes the header values that you registered for [secure strings](USAGE.md#secure-strings). For a request with a body that you want to sign, use `addApproov(connection, body)` or `addApproovToConnection(connection)`. See [adding Approov to a request](USAGE.md#adding-approov-to-a-request).
 
-Approov errors will generate an `ApproovException`, which is a type of `IOException`.
+An Approov error throws an `ApproovException`, which is an `IOException`. A call to `addApproov` before `initialize` also throws `ApproovException`.
 
 ## CHECKING IT WORKS
-Initially you won't have set which API domains to protect, so any `addApproov` call will not add anything. It will have called Approov though and made contact with the Approov cloud service. You will see logging from Approov saying `UNKNOWN_URL`.
 
-Your Approov onboarding email should contain a link allowing you to access [Live Metrics Graphs](https://approov.io/docs/latest/approov-usage-documentation/#metrics-graphs). After you've run your app with Approov integration you should be able to see the results in the live metrics within a minute or so. At this stage you could even release your app to get details of your app population and the attributes of the devices they are running upon.
+Initially you have not added API domains to Approov, so `addApproov` adds nothing. But it calls Approov, and the SDK contacts the Approov cloud service. To see the result of each token fetch, set the logging level to `DEBUG`:
+
+```Java
+ApproovService.setLoggingLevel(ApproovLogLevel.DEBUG);
+```
+
+The package then logs a `Token for <url>` line for each request under the `ApproovService` tag. Before you add your API domains, the line shows `UNKNOWN_URL`. See [logging and diagnostics](USAGE.md#logging-and-diagnostics).
+
+Your Approov onboarding email has a link to the [Live Metrics Graphs](https://approov.io/docs/latest/approov-usage-documentation/#metrics-graphs). After you run your app with Approov, the results show in the live metrics within a minute or so.
 
 ## NEXT STEPS
-To actually protect your APIs and/or secrets there are some further steps. Approov provides two different options for protection:
 
-* [API PROTECTION](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/API-PROTECTION.md): You should use this if you control the backend API(s) being protected and are able to modify them to ensure that a valid Approov token is being passed by the app. An [Approov Token](https://approov.io/docs/latest/approov-usage-documentation/#approov-tokens) is a short-lived cryptographically signed JWT proving the authenticity of the call.
+To protect your APIs or secrets, do some further steps. Approov gives two options for protection:
 
-* [SECRETS PROTECTION](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SECRETS-PROTECTION.md): This allows app secrets, including API keys for 3rd party services, to be protected so that they no longer need to be included in the released app code. These secrets are only made available to valid apps at runtime.
+* [API PROTECTION](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/API-PROTECTION.md): Use this if you control the backend APIs and can change them to check the Approov token that the app sends. An [Approov Token](https://approov.io/docs/latest/approov-usage-documentation/#approov-tokens) is a short-lived, signed JWT that proves the request came from a genuine app.
 
-Note that it is possible to use both approaches side-by-side in the same app.
+* [SECRETS PROTECTION](https://github.com/approov/quickstart-android-java-httpsurlconn/blob/master/SECRETS-PROTECTION.md): Use this to remove app secrets, such as API keys for 3rd party services, from the code of your released app. Approov gives these secrets only to valid apps at runtime.
+
+You can use both options together in the same app.
+
+## UPGRADING FROM 3.5.x
+
+Read the [changelog](CHANGELOG.md) for the full list of changes. Test your app and backend together. These changes need a source change:
+
+* `initialize` resets the configuration each time it runs, and no longer compares account IDs itself. Make your configuration calls after `initialize`. A `null` context now throws `IllegalArgumentException`, also in bypass mode.
+* The message signing helper classes moved. Change imports of `io.approov.util.sig.*` to `io.approov.util.httpsurlconn.sig.*`, and `io.approov.util.http.sfv.*` to `io.approov.util.httpsurlconn.http.sfv.*`.
+* A `SignatureParametersFactory` subclass that sets `useAccountMessageSigning = true` directly now produces both the install and the account signature. To keep the account signature only, call `setUseAccountMessageSigning()`. The factory no longer sets the algorithm on the parameters. A subclass that needs one signature only sets the algorithm on the parameters that it returns.
+* This release removes `prefetch()`. Remove your calls to it. The SDK manages prefetching itself.
+
+If you upgrade from a release before 3.5.7, also remove your calls to the query parameter substitution methods, which 3.5.7 removed. See [secure strings in query parameters](USAGE.md#secure-strings-in-query-parameters).
 
 ---
 
