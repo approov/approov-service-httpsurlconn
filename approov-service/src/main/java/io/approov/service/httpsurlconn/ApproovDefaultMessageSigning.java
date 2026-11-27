@@ -20,9 +20,9 @@ package io.approov.service.httpsurlconn;
 import android.util.Log;
 import android.util.Base64;
 
-import org.bouncycastle.asn1.ASN1InputStream;
-import org.bouncycastle.asn1.ASN1Integer;
-import org.bouncycastle.asn1.ASN1Sequence;
+import io.approov.internal.httpsurlconn.bouncycastle.asn1.ASN1InputStream;
+import io.approov.internal.httpsurlconn.bouncycastle.asn1.ASN1Integer;
+import io.approov.internal.httpsurlconn.bouncycastle.asn1.ASN1Sequence;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -222,15 +222,29 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
         }
         // generate and add a message signature
         HttpsURLConnectionComponentProvider provider = new HttpsURLConnectionComponentProvider(request);
-        SignatureParameters params = buildSignatureParameters(provider, changes);
+        SignatureParameters params;
+        try {
+            params = buildSignatureParameters(provider, changes);
+        } catch (IllegalStateException e) {
+            // Deliberate fail-closed conditions (a required body digest that cannot be generated,
+            // or unconfigured base parameters) must surface via the documented ApproovException
+            // contract of addApproov(...), not as a raw unchecked exception.
+            throw new ApproovException(e.getMessage());
+        }
         if (params == null) {
             // No sig to be added to the request; return the original request.
             return request;
         }
 
-        // Apply the params to get the message
+        // Apply the params to get the message. A failure here is fail-open (proceed unsigned + log).
         SignatureBaseBuilder baseBuilder = new SignatureBaseBuilder(params, provider);
-        String message = baseBuilder.createSignatureBase();
+        String message;
+        try {
+            message = baseBuilder.createSignatureBase();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to build the signature base - proceeding unsigned " + e);
+            return request;
+        }
         // WARNING never log the message as it contains an Approov token which provides access to your API.
 
         // Generate the signature
@@ -243,14 +257,19 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 try {
                     base64 = getInstallMessageSignature(message);
                 } catch (ApproovException e) {
-                    Log.d(TAG, "Failed to get InstallMessageSignature - skipping message signing " + e);
+                    Log.e(TAG, "Failed to get InstallMessageSignature - proceeding unsigned " + e);
                     return request;
                 }
                 if (base64.isEmpty()) {
-                    Log.d(TAG, "InstallMessageSignature is empty - skipping message signing");
+                    Log.e(TAG, "InstallMessageSignature is empty - proceeding unsigned");
                     return request;
                 }
-                signature = decodeBase64(base64);
+                try {
+                    signature = decodeBase64(base64);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
+                    return request;
+                }
                 // decode the signature from ASN.1 DER format
                 try (ASN1InputStream asn1InputStream = new ASN1InputStream(signature)) {
                     ASN1Sequence sequence = (ASN1Sequence) asn1InputStream.readObject();
@@ -262,40 +281,64 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                         System.arraycopy(rBytes, 0, signature, 0, rBytes.length);
                         System.arraycopy(sBytes, 0, signature, rBytes.length, sBytes.length);
                     } else {
-                        throw new IllegalStateException("Not an ASN1Sequence");
+                        Log.e(TAG, "Not an ASN1Sequence - proceeding unsigned");
+                        return request;
                     }
                 } catch (Exception e) {
-                    throw new IllegalStateException("Failed to decode ASN.1 DER ES256 signature", e);
+                    Log.e(TAG, "Failed to decode ASN.1 DER ES256 signature - proceeding unsigned", e);
+                    return request;
                 }
                 break;
             }
             case ALG_HS256: {
                 sigId = "account";
-                String base64 = getAccountMessageSignature(message);
-                signature = decodeBase64(base64);
+                String base64;
+                try {
+                    base64 = getAccountMessageSignature(message);
+                } catch (ApproovException e) {
+                    Log.e(TAG, "Failed to get AccountMessageSignature - proceeding unsigned " + e);
+                    return request;
+                }
+                if (base64.isEmpty()) {
+                    Log.e(TAG, "AccountMessageSignature is empty - proceeding unsigned");
+                    return request;
+                }
+                try {
+                    signature = decodeBase64(base64);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to decode base64 signature - proceeding unsigned " + e);
+                    return request;
+                }
                 break;
             }
             default:
+                // Unsupported algorithm is a misconfiguration — fail CLOSED (abort the request).
                 throw new IllegalStateException("Unsupported algorithm identifier: " + params.getAlg());
         }
 
-        // Calculate the signature and message descriptor headers.
-        Map<String, ListElement<?>> sigMap = new LinkedHashMap<>();
-        sigMap.put(sigId, ByteSequenceItem.valueOf(signature));
-        String sigHeader = Dictionary.valueOf(sigMap).serialize();
-        Map<String, ListElement<?>> sigInputMap = new LinkedHashMap<>();
-        sigInputMap.put(sigId, params.toComponentValue());
-        String sigInputHeader = Dictionary.valueOf(sigInputMap).serialize();
+        // Calculate the signature and message descriptor headers. Serialization failure is
+        // fail-open: proceed unsigned and log at error rather than aborting the request.
+        try {
+            Map<String, ListElement<?>> sigMap = new LinkedHashMap<>();
+            sigMap.put(sigId, ByteSequenceItem.valueOf(signature));
+            String sigHeader = Dictionary.valueOf(sigMap).serialize();
+            Map<String, ListElement<?>> sigInputMap = new LinkedHashMap<>();
+            sigInputMap.put(sigId, params.toComponentValue());
+            String sigInputHeader = Dictionary.valueOf(sigInputMap).serialize();
 
-        // HttpURLConnection doesn't have a removeHeader function, so we use
-        // setRequestProperty to replace any previous values and avoid accumulating
-        // duplicate signature headers across retries or repeated processing.
-        request.setRequestProperty("Signature", sigHeader);
-        request.setRequestProperty("Signature-Input", sigInputHeader);
+            // HttpURLConnection doesn't have a removeHeader function, so we use
+            // setRequestProperty to replace any previous values and avoid accumulating
+            // duplicate signature headers across retries or repeated processing.
+            request.setRequestProperty("Signature", sigHeader);
+            request.setRequestProperty("Signature-Input", sigInputHeader);
 
-        Log.d(TAG, "Constructed Signature header: " + sigHeader);
-        Log.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
-        Log.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
+            Log.d(TAG, "Constructed Signature header: " + sigHeader);
+            Log.d(TAG, "Request Signature header after set: " + request.getRequestProperty("Signature"));
+            Log.d(TAG, "Constructed Signature-Input header: " + sigInputHeader);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to serialize signature headers - proceeding unsigned " + e);
+            return request;
+        }
 
         // Debugging - log the message and signature-related headers
         // WARNING never log the message in production code as it contains the Approov token which allows API access
@@ -503,14 +546,18 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
          */
         protected boolean generateBodyDigest(
                 HttpsURLConnectionComponentProvider provider,
-                SignatureParameters requestParameters
+                SignatureParameters requestParameters,
+                byte[] explicitBody
         ) {
-            HttpsURLConnection request = provider.request;
-            if (!(request instanceof ApproovBufferedHttpsURLConnection)) {
-                return false;
+            // Prefer body bytes supplied explicitly via addApproov(connection, byte[]);
+            // otherwise fall back to a buffered connection body if one is available.
+            byte[] body = explicitBody;
+            if (body == null) {
+                HttpsURLConnection request = provider.request;
+                if (request instanceof ApproovBufferedHttpsURLConnection) {
+                    body = ((ApproovBufferedHttpsURLConnection) request).getBufferedRequestBody();
+                }
             }
-
-            byte[] body = ((ApproovBufferedHttpsURLConnection) request).getBufferedRequestBody();
             if (body == null || body.length == 0) {
                 return false;
             }
@@ -531,7 +578,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
             digestMap.put(bodyDigestAlgorithm, ByteSequenceItem.valueOf(digest.toByteArray()));
             Dictionary digestHeader = Dictionary.valueOf(digestMap);
 
-            request.setRequestProperty("Content-Digest", digestHeader.serialize());
+            provider.request.setRequestProperty("Content-Digest", digestHeader.serialize());
             requestParameters.addComponentIdentifier("Content-Digest");
             return true;
         }
@@ -578,7 +625,7 @@ public class ApproovDefaultMessageSigning implements ApproovServiceMutator {
                 }
             }
             if (bodyDigestAlgorithm != null) {
-                if (!generateBodyDigest(provider, requestParameters) && bodyDigestRequired) {
+                if (!generateBodyDigest(provider, requestParameters, changes.getBodyBytes()) && bodyDigestRequired) {
                     throw new IllegalStateException("Failed to create required body digest");
                 }
             }

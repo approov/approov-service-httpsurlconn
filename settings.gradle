@@ -1,1 +1,26 @@
+def localProperties = new Properties()
+def localPropertiesFile = new File(rootDir, 'local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { inputStream ->
+        localProperties.load(inputStream)
+    }
+}
+
+// Path to the mini-SDK Android root (approov-sdk + test-support) used for integration tests.
+// Override via local.properties (miniSdkAndroidRoot=...) if your checkout layout differs.
+def miniSdkRoot = localProperties.getProperty('miniSdkAndroidRoot', '../../core-service-layers-testing/mini-sdk/android')
+def approovSdkDir = new File(miniSdkRoot, 'approov-sdk')
+def testSupportDir = new File(miniSdkRoot, 'test-support')
+
 include ':approov-service'
+
+if (approovSdkDir.exists() && testSupportDir.exists()) {
+    include ':approov-sdk'
+    project(':approov-sdk').projectDir = approovSdkDir
+
+    include ':test-support'
+    project(':test-support').projectDir = testSupportDir
+} else {
+    println "WARNING: mini-sdk not found at ${miniSdkRoot}."
+    println "Integration tests requiring approov-sdk / test-support will not compile."
+}

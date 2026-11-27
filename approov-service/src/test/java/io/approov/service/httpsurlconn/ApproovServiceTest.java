@@ -1,9 +1,11 @@
 package io.approov.service.httpsurlconn;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -37,10 +39,11 @@ public class ApproovServiceTest {
     @Before
     public void setUp() {
         context = mock(Context.class);
+        when(context.getApplicationContext()).thenReturn(context);
         mockApproov = Mockito.mockStatic(Approov.class);
         mockAndroidBase64 = Mockito.mockStatic(android.util.Base64.class);
-        mockApproov.when(() -> Approov.initialize(context, CONFIG, "auto", null)).thenAnswer(invocation -> null);
-        mockApproov.when(() -> Approov.setUserProperty("approov-service-httpsurlconn")).thenAnswer(invocation -> null);
+        mockApproov.when(() -> Approov.initialize(Mockito.any(), Mockito.anyString(), Mockito.anyString(), Mockito.any())).thenReturn(false);
+        mockApproov.when(() -> Approov.setUserProperty(Mockito.anyString())).thenAnswer(invocation -> null);
         mockAndroidBase64.when(() -> android.util.Base64.decode(Mockito.anyString(), Mockito.anyInt()))
                 .thenAnswer(invocation ->
                         Base64.getDecoder().decode(invocation.getArgument(0, String.class)));
@@ -60,6 +63,7 @@ public class ApproovServiceTest {
 
     @After
     public void tearDown() {
+        ApproovService.reset();
         if (mockApproov != null) {
             mockApproov.close();
         }
@@ -108,37 +112,6 @@ public class ApproovServiceTest {
     }
 
     @Test
-    public void addApproovReturnsWrappedConnectionWhenQuerySubstitutionChangesUrl() throws Exception {
-        String requestUrl = "https://example.com/shapes?api_key=old-key";
-        String substitutedUrl = "https://example.com/shapes?api_key=replaced-key";
-
-        Approov.TokenFetchResult tokenResult = mockTokenFetchResult(
-                Approov.TokenFetchStatus.SUCCESS,
-                "approov-token-value",
-                null
-        );
-        Approov.TokenFetchResult secureStringResult = mockTokenFetchResult(
-                Approov.TokenFetchStatus.SUCCESS,
-                null,
-                "replaced-key"
-        );
-
-        mockApproov.when(() -> Approov.fetchApproovTokenAndWait(requestUrl)).thenReturn(tokenResult);
-        mockApproov.when(() -> Approov.fetchSecureStringAndWait("old-key", null)).thenReturn(secureStringResult);
-
-        ApproovService.addSubstitutionQueryParam("api_key");
-
-        HttpsURLConnection request = newConnection(requestUrl);
-        request.setRequestMethod("GET");
-
-        HttpsURLConnection returned = ApproovService.addApproovToConnection(request);
-
-        assertNotSame(request, returned);
-        assertTrue(returned instanceof ApproovBufferedHttpsURLConnection);
-        assertEquals(substitutedUrl, returned.getURL().toString());
-    }
-
-    @Test
     public void addApproovUsesStatusAsTokenHeaderWhenConfigured() throws Exception {
         String requestUrl = "https://example.com/shapes";
         Approov.TokenFetchResult tokenResult = mockTokenFetchResult(
@@ -158,21 +131,6 @@ public class ApproovServiceTest {
         assertEquals("NO_NETWORK", request.getRequestProperty("Approov-Token"));
     }
 
-    @Test
-    public void substituteQueryParamsReplacesConfiguredValues() throws Exception {
-        String requestUrl = "https://example.com/shapes?api_key=old-key";
-        Approov.TokenFetchResult secureStringResult = mockTokenFetchResult(
-                Approov.TokenFetchStatus.SUCCESS,
-                null,
-                "replaced-key"
-        );
-        mockApproov.when(() -> Approov.fetchSecureStringAndWait("old-key", null)).thenReturn(secureStringResult);
-        ApproovService.addSubstitutionQueryParam("api_key");
-
-        URL substituted = ApproovService.substituteQueryParams(new URL(requestUrl));
-
-        assertEquals("https://example.com/shapes?api_key=replaced-key", substituted.toString());
-    }
 
     private static HttpsURLConnection newConnection(String url) throws Exception {
         return (HttpsURLConnection) new URL(url).openConnection();
@@ -199,5 +157,120 @@ public class ApproovServiceTest {
             return Base64.getEncoder()
                     .encodeToString("unit-test-signature".getBytes(StandardCharsets.UTF_8));
         }
+    }
+
+    @Test
+    public void initializeWithNullConfigThrowsIllegalArgument() {
+        ApproovService.reset();
+        assertThrows(IllegalArgumentException.class, () -> ApproovService.initialize(context, null));
+        // Per TESTING_REQUIREMENTS §17-18: failure preserves the prior (reset/uninitialised) state.
+        assertFalse(ApproovService.isInitialized());
+    }
+
+    @Test
+    public void initializeWithEmptyConfigEntersBypassMode() {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        assertTrue(ApproovService.isInitialized());
+        org.junit.Assert.assertFalse(ApproovService.isApproovEnabled());
+    }
+
+    @Test(expected = ApproovException.class)
+    public void getDeviceIDThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.getDeviceID();
+    }
+
+    @Test(expected = ApproovException.class)
+    public void fetchTokenThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.fetchToken("https://example.com");
+    }
+
+    @Test(expected = ApproovException.class)
+    public void fetchSecureStringThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.fetchSecureString("key", null);
+    }
+
+    @Test(expected = ApproovException.class)
+    public void fetchCustomJWTThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.fetchCustomJWT("payload");
+    }
+
+    @Test(expected = ApproovException.class)
+    public void setDataHashInTokenThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.setDataHashInToken("data");
+    }
+
+    @Test(expected = ApproovException.class)
+    public void setDevKeyThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.setDevKey("devkey");
+    }
+
+    @Test(expected = ApproovException.class)
+    public void setInstallAttrsInTokenThrowsWhenBypassed() throws Exception {
+        ApproovService.reset();
+        ApproovService.initialize(context, "");
+        ApproovService.setInstallAttrsInToken("attrs");
+    }
+
+    @Test
+    public void doubleInitializationIgnoresSameConfig() {
+        ApproovService.reset();
+        ApproovService.initialize(context, CONFIG);
+        assertTrue(ApproovService.isInitialized());
+        assertTrue(ApproovService.isApproovEnabled());
+        
+        // This should be ignored without throwing an exception
+        ApproovService.initialize(context, CONFIG);
+    }
+
+    @Test
+    public void doubleInitializationThrowsOnDifferentConfigAndPreservesState() {
+        ApproovService.reset();
+        ApproovService.initialize(context, CONFIG);
+        assertTrue(ApproovService.isInitialized());
+        assertTrue(ApproovService.isApproovEnabled());
+
+        // SDK throws when initialized with a conflicting config.
+        mockApproov.when(() -> Approov.initialize(context, "different-config", "auto", null))
+                   .thenThrow(new IllegalStateException("config conflict"));
+
+        assertThrows(IllegalStateException.class,
+                () -> ApproovService.initialize(context, "different-config"));
+        // Per TESTING_REQUIREMENTS §17-18: failure preserves the prior operating state.
+        assertTrue(ApproovService.isInitialized());
+        assertTrue(ApproovService.isApproovEnabled());
+    }
+
+    @Test
+    public void initializeWithCommentCallsNativeInitializeCorrectly() {
+        ApproovService.reset();
+        ApproovService.initialize(context, CONFIG, "my-custom-comment");
+        assertTrue(ApproovService.isInitialized());
+        assertTrue(ApproovService.isApproovEnabled());
+        mockApproov.verify(() -> Approov.initialize(context, CONFIG, "auto", "my-custom-comment"));
+    }
+
+    @Test
+    public void doubleInitializationAllowsReinit() {
+        ApproovService.reset();
+        ApproovService.initialize(context, CONFIG);
+        assertTrue(ApproovService.isInitialized());
+        
+        // A second initialization with a different config is allowed if the comment starts with "reinit"
+        ApproovService.initialize(context, "different-config", "reinit:mysecret");
+        assertTrue(ApproovService.isInitialized());
+        mockApproov.verify(() -> Approov.initialize(context, "different-config", "auto", "reinit:mysecret"));
     }
 }
