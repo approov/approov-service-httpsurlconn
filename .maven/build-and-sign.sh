@@ -3,25 +3,31 @@
 set -e
 ## set variables/constants required by the script
 
-# Retrieve the tag from GITHUB_REF
-if [ -z "$GITHUB_REF" ]; then
-    echo "Error: GITHUB_REF is not set. This script requires a GitHub tag to be present."
+# Prefer the explicitly validated release tag. Fall back to GITHUB_REF when the
+# script is invoked by a tag-triggered workflow or directly in older tooling.
+if [ -z "${CURRENT_TAG:-}" ]; then
+    if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+        CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+    else
+        echo "Error: CURRENT_TAG is not set and GITHUB_REF is not a tag reference."
+        exit 1
+    fi
+fi
+
+# Check that the release tag matches the expected format (e.g., x.y.z).
+if [[ ! "$CURRENT_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Error: Current Git tag ($CURRENT_TAG) does not match the required format (x.y.z)."
     exit 1
 fi
 
-# Extract the tag name from GITHUB_REF
-CURRENT_TAG=$(echo "$GITHUB_REF" | sed 's|refs/tags/||')
-
-# Check if the extracted tag matches the expected format (e.g., x.y.z)
-if [[ ! "$CURRENT_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Error: Current Git tag ($CURRENT_TAG) does not match the required format (x.y.z) ,using 0.0.0"
-    CURRENT_TAG="0.0.0"
-fi
+# A 3.7.x or later release must never ship on a 3.5.x Approov SDK, even when this script is run outside the
+# release workflow
+(cd .. && ./gradlew -q verifyReleaseSdkVersion -PapproovServiceVersion="${CURRENT_TAG}")
 
 # The version of the package that will be build and will be visible in maven central
-# For Approov SDK release 3.3.0 (library 7257) the version was 3.3.0
+# For Approov SDK release 3.4.0 (library 7270) the version was 3.4.0
 # This is also used to rename the folder where the package is stored by replacing the TAG-RENAME-DIR
-# THE POM FILE MUST BE UPDATED WITH THE CORRECT VERSION WHICH MUST MATCH THIS VARIABLE
+# THE POM FILE MUST BE UPDATED BY THIS SCRIPT (SEE BELOW) WITH THE CORRECT VERSION WHICH MUST MATCH THIS VARIABLE
 VERSION="${CURRENT_TAG}"
 echo "VERSION: ${VERSION}"
 
@@ -61,15 +67,6 @@ JAVADOC_JAR_PATH="../approov-service/docs/javadoc.jar"
 # which MUST match the VERSION variable above
 POM_FILE_PATH="../approov-service/pom.xml"
 
-# Place the package version in the correct pom file location replacing VERSION_PLACEHOLDER string
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS (BSD sed requires a backup suffix with -i)
-  sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" "$POM_FILE_PATH"
-else
-  # Linux (GNU sed allows -i without a suffix)
-  sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" "$POM_FILE_PATH"
-fi
-
 # Check if the above files exist before proceeding further
 if [ ! -f ${AAR_PATH} ]; then
     echo "File not found: ${AAR_PATH}"
@@ -89,6 +86,14 @@ if [ ! -f ${POM_FILE_PATH} ]; then
     exit 1
 fi
 
+# Place the package version in the correct pom file location replacing VERSION_PLACEHOLDER string
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS (BSD sed requires a backup suffix with -i)
+  sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" "$POM_FILE_PATH"
+else
+  # Linux (GNU sed allows -i without a suffix)
+  sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" "$POM_FILE_PATH"
+fi
 
 # The destination directory to place all the files
 DESTINATION_DIR="${PACKAGE_DIR_STRUCTURE}/${VERSION}"
@@ -235,6 +240,3 @@ else
     echo "Failed to create zip file: ${FILE_PREFIX}.zip"
     exit 1
 fi
-
-# Copy the zip file to the destination directory to inspect
-cp ${FILE_PREFIX}.zip ../

@@ -17,3 +17,11 @@
 -keepnames class com.criticalblue.approovsdk.** {
     native <methods>;
 }
+
+# Tink is bundled relocated under io.approov.util.httpsurlconn and is otherwise
+# left for R8 to shrink: no rule keeps its classes. This is Tink's own
+# META-INF/proguard/protobuf.pro restated for the relocated package. It only
+# keeps fields of protobuf messages that are already live.
+-keepclassmembers class * extends io.approov.util.httpsurlconn.tink.shaded.protobuf.GeneratedMessageLite {
+  <fields>;
+}

@@ -26,8 +26,8 @@ import java.util.Base64;
 
 import javax.net.ssl.HttpsURLConnection;
 
-import io.approov.util.sig.ComponentProvider;
-import io.approov.util.sig.SignatureParameters;
+import io.approov.util.httpsurlconn.sig.ComponentProvider;
+import io.approov.util.httpsurlconn.sig.SignatureParameters;
 
 public class ApproovServiceTest {
     private static final String CONFIG = "config";
@@ -163,7 +163,7 @@ public class ApproovServiceTest {
     public void initializeWithNullConfigThrowsIllegalArgument() {
         ApproovService.reset();
         assertThrows(IllegalArgumentException.class, () -> ApproovService.initialize(context, null));
-        // Per TESTING_REQUIREMENTS §17-18: failure preserves the prior (reset/uninitialised) state.
+        // a failed initialization preserves the prior (reset) state
         assertFalse(ApproovService.isInitialized());
     }
 
@@ -225,14 +225,16 @@ public class ApproovServiceTest {
     }
 
     @Test
-    public void doubleInitializationIgnoresSameConfig() {
+    public void doubleInitializationWithSameConfigIsPassedToTheSdk() {
         ApproovService.reset();
+        mockApproov.clearInvocations();
         ApproovService.initialize(context, CONFIG);
         assertTrue(ApproovService.isInitialized());
         assertTrue(ApproovService.isApproovEnabled());
-        
-        // This should be ignored without throwing an exception
+
+        // the SDK decides a repeat, so the call reaches it again and does not throw
         ApproovService.initialize(context, CONFIG);
+        mockApproov.verify(() -> Approov.initialize(context, CONFIG, "auto", null), Mockito.times(2));
     }
 
     @Test
@@ -248,7 +250,7 @@ public class ApproovServiceTest {
 
         assertThrows(IllegalStateException.class,
                 () -> ApproovService.initialize(context, "different-config"));
-        // Per TESTING_REQUIREMENTS §17-18: failure preserves the prior operating state.
+        // a failed initialization preserves the prior operating state
         assertTrue(ApproovService.isInitialized());
         assertTrue(ApproovService.isApproovEnabled());
     }
@@ -263,14 +265,14 @@ public class ApproovServiceTest {
     }
 
     @Test
-    public void doubleInitializationAllowsReinit() {
+    public void aSecondInitializationPassesItsConfigAndCommentToTheSdkUnchanged() {
         ApproovService.reset();
         ApproovService.initialize(context, CONFIG);
         assertTrue(ApproovService.isInitialized());
-        
-        // A second initialization with a different config is allowed if the comment starts with "reinit"
-        ApproovService.initialize(context, "different-config", "reinit:mysecret");
+
+        // the layer does not compare account IDs or interpret the comment, the SDK decides
+        ApproovService.initialize(context, "different-config", "another comment");
         assertTrue(ApproovService.isInitialized());
-        mockApproov.verify(() -> Approov.initialize(context, "different-config", "auto", "reinit:mysecret"));
+        mockApproov.verify(() -> Approov.initialize(context, "different-config", "auto", "another comment"));
     }
 }

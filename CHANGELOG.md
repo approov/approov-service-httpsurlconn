@@ -4,6 +4,55 @@ All notable changes to this package will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.7.0] - 2026-11-27
+
+Entries marked **Breaking** need a source change. See [Upgrading from 3.5.x](README.md#upgrading-from-35x).
+
+### Changed
+- **Breaking:** `initialize` passes every non-empty account ID and comment to the Approov SDK and the SDK decides, so the layer no longer compares account IDs itself. It resets the configuration each time, so make your configuration calls after it. It throws `IllegalArgumentException` for a null context, also in bypass mode (`""`).
+- **Breaking:** A request that carries a header that the package added does not follow redirects by itself. Thus the platform does not send those headers to another location. Follow a redirect with a new request and `addApproov`. See [redirects](ADVANCED.md#redirects).
+- **Breaking:** The message signing helper classes moved from `io.approov.util.http.sfv` and `io.approov.util.sig` to `io.approov.util.httpsurlconn.http.sfv` and `io.approov.util.httpsurlconn.sig`. Update imports of classes such as `SignatureParameters` and `ComponentProvider`.
+- **Breaking:** `SignatureParametersFactory` has a new protected field, `useInstallMessageSigning`, which starts `true`. Its parameters no longer set the algorithm, because the signer produces one signature for each algorithm that the factory selects. A subclass that sets `useAccountMessageSigning = true` directly now produces both signatures. Call `setUseAccountMessageSigning()` to produce the account signature only.
+- Google Tink 1.23.0 replaces BouncyCastle. The AAR bundles Tink in a relocated package, so it cannot clash with your own dependencies. The published POM adds none.
+- The package depends on Approov SDK 3.7.0, where 3.5.x depended on 3.5.3.
+- The package substitutes secure string headers on requests to secrets-only API domains as well as on token-protected ones. A secrets-only API has no token header.
+- Each request that the package pins sets `Connection: close`, so that it opens its own connection and the pins apply to it. A `Connection` header that your app sets stays.
+- A failed secure string fetch no longer fails the request under the standard mutators. The package skips the substitution and the request proceeds.
+- The package matches pins against the certificate chain that the platform validated. A pin matches the host without regard to case and with one trailing dot ignored.
+- If the SDK cannot supply the pins, connections continue on OS trust and the package logs one error.
+- `ApproovRejectionException` is now a subclass of `ApproovFetchStatusException` with the status `REJECTED`, so a handler for `ApproovFetchStatusException` catches it. Its constructor and getters stay the same.
+- Your `handleInterceptorProcessedRequest` hook cannot change the token or trace header that the package set. The package puts the header back and logs a warning once per process. A message signature covers the header that the package set.
+- `getLastARC()` makes no token fetch of its own. It returns the ARC of the most recent token, secure string or custom JWT fetch, or an empty string.
+- The package logs a missing install or account signature as a warning once per process. It logs a request that it sends unsigned as an error once per process. It logs later occurrences at debug level.
+- The signed `@target-uri` leaves out an explicit default port (`:443` for `https`, `:80` for `http`) and any `#fragment`. The signed `@authority` is the lowercase host with a non-default port. The signature uses the path `/` for a URL with no path. The package no longer reads the URL with `java.net.URI`. A host factory matches the host name without regard to case and without a port.
+- The package signs the URL in the normalized form that Android sends. Android percent-encodes some characters, such as `|` or a space in the path and characters that are not ASCII, and keeps existing escapes. If the package cannot parse a URL, it sends the request unsigned and logs one error.
+- The signed `@query` starts with `?`, and is `?` alone for a URL with no query, as RFC 9421 requires. The signed `@query-param` value uses the form encoding of RFC 9421.
+- A signature covers each component once, also when the token header is one of the optional headers of the factory.
+- Only a required body digest that cannot be generated fails a request closed, as an `ApproovException` with a `RequiredBodyDigestException` cause. Any other failure to build the signature parameters sends the request unsigned and logs an error. Examples are missing base parameters and an exception from your own factory.
+- A request that `addApproovToConnection` buffers looks up its headers without regard to case, as `HttpURLConnection` does. A message signature over a request with a body covers the header values that the package sends.
+- If a signature covers a header that the request does not carry, the package sends the request unsigned and logs an error. Before, it signed an empty value.
+- A structured field decimal keeps the leading zeros of its fraction, so `1.05` stays `1.05`.
+- An unsupported message signing algorithm fails the request with `ApproovException`, where 3.5.x threw `IllegalStateException`.
+
+### Deprecated
+- `setProceedOnNetworkFail` and `getProceedOnNetworkFail`. Use `ApproovServiceMutator.ALWAYS_PROCEED`, or `setUseApproovStatusIfNoToken(true)`.
+- `getMessageSignature(message)`. Use `getAccountMessageSignature`.
+- `setApproovHeader`, `setApproovTraceIDHeader`, `getApproovTokenHeader`, `getApproovTokenPrefix` and `getApproovTraceIDHeader`. Use `setTokenHeader(header, prefix)`, `setTraceIDHeader(header)`, `getTokenHeader()`, `getTokenPrefix()` and `getTraceIDHeader()`.
+
+### Added
+- `ApproovDefaultMessageSigning.combined()` and `combined(ApproovServiceMutator decisions)` give a signer that adds both the install and the account signature and makes the decisions you pass, for example `ApproovDefaultMessageSigning.combined(ApproovServiceMutator.ALWAYS_PROCEED)`.
+- Message signing can produce the account signature as well as the install signature: `SignatureParametersFactory.setUseInstallAndAccountMessageSigning()`.
+- `ApproovServiceMutator.CLOSE_FAILURE`, the default, which keeps the 3.5.x token decisions, and `ALWAYS_PROCEED`, which never aborts a request on a token fetch failure.
+- `ApproovService.getServerAdjustedCurrentTimeMS()`, the current time corrected to the Approov servers' clock. Message signatures take their `created` and `expires` times from it. If the server time is not available, the package uses the device clock and logs a warning.
+- `ApproovDefaultMessageSigning.RequiredBodyDigestException`, which a factory throws when a required body digest cannot be generated.
+- `ApproovException(String, Throwable)` and `ApproovException(Throwable)`, which keep the original exception as the cause.
+- The names shared by all Approov packages: `isApproovServiceEnabled()`, `isApproovProtectionEnabled()`, `setInstallAttributes(String)`, `getTokenHeader()`, `getTokenPrefix()`, `getTraceIDHeader()`, `setTokenHeader(header, prefix)` and `setTraceIDHeader(header)`.
+- `ApproovService.setLoggingLevel(ApproovLogLevel)`, `INFO` by default. `OFF` silences the layer, and debug logging for the `ApproovService` tag raises any other level to `DEBUG`. The package logs the loggable token at `DEBUG` only, with the URL without its query, user info or fragment.
+
+### Removed
+- **Breaking:** `prefetch()`. The SDK manages prefetching itself.
+- BouncyCastle, which the package no longer bundles.
+
 ## [3.5.7] - 2026-11-27
 
 ### Added

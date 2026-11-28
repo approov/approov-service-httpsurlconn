@@ -126,14 +126,33 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
             if (entry.getKey() == null) {
                 continue;
             }
-            List<String> values = entry.getValue();
-            if (values == null) {
-                copy.put(entry.getKey(), new ArrayList<>());
-            } else {
-                copy.put(entry.getKey(), new ArrayList<>(values));
+            // header names are case-insensitive, so names that differ only in case are merged
+            String key = findKey(copy, entry.getKey());
+            if (key == null) {
+                key = entry.getKey();
+                copy.put(key, new ArrayList<>());
             }
+            if (entry.getValue() != null)
+                copy.get(key).addAll(entry.getValue());
         }
         return copy;
+    }
+
+    /**
+     * Finds the name under which a header is held, without regard to case, as HttpURLConnection does.
+     *
+     * @param headers are the headers
+     * @param name is the header name to look for
+     * @return the held name, or null if the header is not held
+     */
+    private static String findKey(Map<String, List<String>> headers, String name) {
+        if (name == null)
+            return null;
+        for (String key : headers.keySet()) {
+            if (name.equalsIgnoreCase(key))
+                return key;
+        }
+        return null;
     }
 
     private void ensureMutable() {
@@ -143,13 +162,18 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
     }
 
     private void setHeaderValue(String key, String value) {
+        // a header set again under a name that differs only in case replaces the held one
+        String held = findKey(requestProperties, key);
+        if (held != null)
+            requestProperties.remove(held);
         List<String> values = new ArrayList<>(1);
         values.add(value);
         requestProperties.put(key, values);
     }
 
     private void addHeaderValue(String key, String value) {
-        List<String> values = requestProperties.get(key);
+        String held = findKey(requestProperties, key);
+        List<String> values = (held != null) ? requestProperties.get(held) : null;
         if (values == null) {
             values = new ArrayList<>();
             requestProperties.put(key, values);
@@ -172,6 +196,8 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
                     this,
                     preparedRequestData.changes
             );
+            // the token and trace headers are set by the layer, so a callback cannot drop or change them
+            ApproovService.restoreApproovHeaders(processedRequest, preparedRequestData.changes);
             if ((processedRequest != null) && (processedRequest != this)) {
                 synchronizeFromReturnedRequest(processedRequest);
             }
@@ -512,7 +538,8 @@ final class ApproovBufferedHttpsURLConnection extends HttpsURLConnection {
 
     @Override
     public String getRequestProperty(String key) {
-        List<String> values = requestProperties.get(key);
+        String held = findKey(requestProperties, key);
+        List<String> values = (held != null) ? requestProperties.get(held) : null;
         if (values == null || values.isEmpty()) {
             return null;
         }

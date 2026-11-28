@@ -17,23 +17,25 @@
 
 package io.approov.service.httpsurlconn;
 
+import com.criticalblue.approovsdk.Approov;
+
 // ApproovRejectionException provides additional information if the app has been rejected by Approov
-public class ApproovRejectionException extends ApproovException {
+public class ApproovRejectionException extends ApproovFetchStatusException {
     // provides a code of the app state for support purposes
-    private String arc;
+    private final String arc;
 
     // provides a comma separated list of rejection reasons (if the feature is enabled in Approov)
-    private String rejectionReasons;
+    private final String rejectionReasons;
 
     /**
      * Constructs an exception if the app is rejected by Approov.
      *
      * @param message is the basic information about the exception cause
      * @param arc is the code that can be used for support purposes
-     * @param rejectionReasons may provide a comma separated list of rejection reasons
+     * @param rejectionReasons may provide a comma separated list of rejection reasons, or null
      */
     public ApproovRejectionException(String message, String arc, String rejectionReasons) {
-        super(message);
+        super(Approov.TokenFetchStatus.REJECTED, message);
         this.arc = arc;
         this.rejectionReasons = rejectionReasons;
     }
@@ -52,7 +54,7 @@ public class ApproovRejectionException extends ApproovException {
      * Gets a comma separated list of device properties that are causing a rejection, if this
      * feature is enabled.
      *
-     * @return comma separated list of rejection reasons
+     * @return comma separated list of rejection reasons, or null
      */
     public String getRejectionReasons() {
         return rejectionReasons;
