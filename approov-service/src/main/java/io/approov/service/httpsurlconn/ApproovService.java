@@ -514,7 +514,7 @@ public class ApproovService {
     // immutable once the connection is opened, and the automated path broke request-mutation
     // tracking that message signing relies on. Secure-string query values must now be fetched
     // manually via fetchSecureString() and built into the URL before openConnection().
-    // See USAGE.md ("Substituting Query Parameters").
+    // See ADVANCED.md ("Secure strings").
 
     /**
      * Adds an exclusion URL regular expression. If a URL for a request matches this regular expression
@@ -1457,6 +1457,6 @@ public class ApproovService {
 
     // substituteQueryParams(URL) and substituteQueryParam(URL, String) were removed (Issue #14).
     // Fetch secure-string query values manually with fetchSecureString() and build the URL before
-    // openConnection(); see USAGE.md ("Substituting Query Parameters").
+    // openConnection(); see ADVANCED.md ("Secure strings").
 }
 
